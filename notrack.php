@@ -7,6 +7,13 @@
  * their privacy by allowing them to disable analytics, cookies, and other
  * tracking technologies.
  *
+ * SECURITY RECOMMENDATIONS:
+ * - Always test thoroughly in a staging environment before deploying to production
+ * - Regularly update the plugin to ensure security patches are applied
+ * - Consider implementing additional nonces for AJAX requests in future versions
+ * - Monitor for any unusual activity in tracking opt-outs
+ * - Ensure your WordPress installation is kept up-to-date
+ *
  * @package           NoTrack
  * @author            Phoenix Online Media
  * @copyright         2023 Phoenix Online Media
@@ -93,6 +100,12 @@ function notrack_get_supported_trackers() {
  * It ensures that only valid trackers are saved and that their parameters are
  * properly sanitized to prevent security issues.
  *
+ * Security measures:
+ * - Validates tracker IDs against supported trackers
+ * - Sanitizes all parameter values with sanitize_text_field()
+ * - Ensures boolean values are properly cast
+ * - Prevents injection of malicious data
+ *
  * @since 1.0.0
  * @param array $input The unsanitized tracker settings.
  * @return array The sanitized tracker settings.
@@ -101,18 +114,31 @@ function notrack_sanitize_trackers( $input ) {
     $sanitized_input = array();
     $supported_trackers = notrack_get_supported_trackers();
     
+    // Ensure input is an array
+    if ( ! is_array( $input ) ) {
+        return $sanitized_input;
+    }
+    
     // Loop through each supported tracker
     foreach ( $supported_trackers as $tracker_id => $tracker_data ) {
+        // Validate tracker ID
+        $tracker_id = sanitize_key( $tracker_id );
+        
         // Check if the tracker is enabled
         if ( isset( $input[$tracker_id]['enabled'] ) ) {
-            $sanitized_input[$tracker_id]['enabled'] = true;
+            $sanitized_input[$tracker_id]['enabled'] = (bool) $input[$tracker_id]['enabled'];
         } else {
             $sanitized_input[$tracker_id]['enabled'] = false;
         }
         
         // Sanitize parameters if they exist
         if ( ! empty( $tracker_data['parameters'] ) ) {
-            foreach ( $tracker_data['parameters'] as $param_key => $param_value ) {
+            $sanitized_input[$tracker_id]['parameters'] = array();
+            
+            foreach ( $tracker_data['parameters'] as $param_key => $param_default ) {
+                // Validate parameter key
+                $param_key = sanitize_key( $param_key );
+                
                 if ( isset( $input[$tracker_id]['parameters'][$param_key] ) ) {
                     // Sanitize the parameter value
                     $sanitized_input[$tracker_id]['parameters'][$param_key] = 
@@ -185,7 +211,7 @@ function notrack_wp_head() {
                     case 'google_analytics':
                         // Get tracking ID if available
                         $tracking_id = isset($tracker_config['parameters']['tracking_id']) ? 
-                            $tracker_config['parameters']['tracking_id'] : '';
+                            sanitize_text_field($tracker_config['parameters']['tracking_id']) : '';
                         ?>
                         // Disable Google Analytics
                         window['ga-disable-<?php echo esc_js($tracking_id); ?>'] = true;
@@ -199,6 +225,7 @@ function notrack_wp_head() {
                         break;
                         
                     case 'microsoft_clarity':
+                        // All values are hardcoded, no need for escaping
                         ?>
                         // Disable Microsoft Clarity
                         window['clarity'] = window['clarity'] || function() {};
@@ -208,7 +235,7 @@ function notrack_wp_head() {
                         break;
                         
                     case 'hotjar':
-                        // Hotjar uses cookies, but we can also disable it via script
+                        // All values are hardcoded, no need for escaping
                         ?>
                         // Disable Hotjar
                         window['hjDisableHeatmaps'] = true;
@@ -259,9 +286,14 @@ function notrack_enqueue_scripts() {
     $enabled_trackers = array();
     
     // Build array of enabled tracker keys
-    foreach ($trackers as $tracker_id => $tracker_config) {
-        if (!empty($tracker_config['enabled'])) {
-            $enabled_trackers[] = $tracker_id;
+    if ( is_array( $trackers ) ) {
+        foreach ( $trackers as $tracker_id => $tracker_config ) {
+            // Ensure tracker_id is sanitized
+            $tracker_id = sanitize_key( $tracker_id );
+            
+            if ( ! empty( $tracker_config['enabled'] ) ) {
+                $enabled_trackers[] = $tracker_id;
+            }
         }
     }
     
@@ -284,19 +316,26 @@ function notrack_enqueue_scripts() {
  * user tracking preferences. It verifies the nonce for security and sets
  * the appropriate cookies based on the user's choices.
  *
+ * Security measures:
+ * - Nonce verification to prevent CSRF attacks
+ * - Sanitization of all input data
+ * - Validation of opt-out value
+ *
  * @since 1.0.0
  * @return void
  */
 function notrack_ajax_update_preferences() {
     // Check nonce for security
-    if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'notrack-nonce' ) ) {
+    if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( $_POST['nonce'] ), 'notrack-nonce' ) ) {
         wp_send_json_error( array( 'message' => __( 'Security check failed.', 'notrack' ) ) );
     }
     
     // Process form data
     $form_data = array();
     if ( isset( $_POST['form_data'] ) ) {
-        parse_str( $_POST['form_data'], $form_data );
+        // Sanitize the form data string before parsing
+        $sanitized_form_data = sanitize_text_field( $_POST['form_data'] );
+        parse_str( $sanitized_form_data, $form_data );
     }
     
     // Set opt-out cookie
@@ -305,8 +344,19 @@ function notrack_ajax_update_preferences() {
     // Set cookie expiration to 1 year
     $expiry = time() + ( 365 * 24 * 60 * 60 );
     
-    // Set the cookie
-    setcookie( 'notrack_opted_out', $opt_out ? 'true' : 'false', $expiry, '/', '', is_ssl(), true );
+    // Set the cookie with secure parameters
+    setcookie( 
+        'notrack_opted_out', 
+        $opt_out ? 'true' : 'false', 
+        array(
+            'expires' => $expiry,
+            'path' => '/',
+            'domain' => '',
+            'secure' => is_ssl(),
+            'httponly' => false, // Must be accessible by JavaScript
+            'samesite' => 'Lax'
+        )
+    );
     
     // Send success response
     wp_send_json_success( array(
@@ -546,38 +596,6 @@ class NoTrack {
     }
 
     /**
-     * Enqueue scripts
-     *
-     * Load frontend scripts and styles.
-     */
-    public function enqueue_scripts() {
-        wp_enqueue_style(
-            'notrack-style',
-            NOTRACK_PLUGIN_URL . 'assets/css/notrack.css',
-            array(),
-            NOTRACK_VERSION
-        );
-        
-        wp_enqueue_script(
-            'notrack-script',
-            NOTRACK_PLUGIN_URL . 'assets/js/notrack.js',
-            array( 'jquery' ),
-            NOTRACK_VERSION,
-            true
-        );
-        
-        // Localize script with plugin data
-        wp_localize_script(
-            'notrack-script',
-            'notrack_data',
-            array(
-                'ajax_url' => admin_url( 'admin-ajax.php' ),
-                'nonce' => wp_create_nonce( 'notrack-nonce' ),
-            )
-        );
-    }
-
-    /**
      * Opt-out shortcode
      *
      * Shortcode to display the opt-out form on pages.
@@ -692,6 +710,58 @@ class NoTrack {
         echo '</button>';
         
         return ob_get_clean();
+    }
+
+    /**
+     * Enqueue scripts
+     *
+     * Load frontend scripts and styles.
+     * 
+     * @since 1.0.0
+     * @return void
+     */
+    public function enqueue_scripts() {
+        wp_enqueue_style(
+            'notrack-style',
+            NOTRACK_PLUGIN_URL . 'assets/css/notrack.css',
+            array(),
+            NOTRACK_VERSION
+        );
+        
+        wp_enqueue_script(
+            'notrack-script',
+            NOTRACK_PLUGIN_URL . 'assets/js/notrack.js',
+            array( 'jquery' ),
+            NOTRACK_VERSION,
+            true
+        );
+        
+        // Get enabled trackers from options for localization
+        $trackers = get_option( 'notrack_trackers', array() );
+        $enabled_trackers = array();
+        
+        // Build array of enabled tracker keys
+        if ( is_array( $trackers ) ) {
+            foreach ( $trackers as $tracker_id => $tracker_config ) {
+                // Ensure tracker_id is sanitized
+                $tracker_id = sanitize_key( $tracker_id );
+                
+                if ( ! empty( $tracker_config['enabled'] ) ) {
+                    $enabled_trackers[] = $tracker_id;
+                }
+            }
+        }
+        
+        // Localize script with plugin data
+        wp_localize_script(
+            'notrack-script',
+            'notrack_data',
+            array(
+                'enabled_trackers' => $enabled_trackers,
+                'ajax_url' => admin_url( 'admin-ajax.php' ),
+                'nonce' => wp_create_nonce( 'notrack-nonce' ),
+            )
+        );
     }
 }
 
