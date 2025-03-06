@@ -77,18 +77,200 @@ function notrack_get_supported_trackers() {
                 'tracking_id' => '', // Google Analytics tracking ID (e.g., UA-XXXXX-Y or G-XXXXXXXX)
             ),
             'description' => __( 'Prevents Google Analytics from tracking page views and user interactions.', 'notrack' ),
+            'keywords' => array('analytics', 'ga', 'gtag', 'google tag manager', 'gtm'),
+            'id_pattern' => '/UA-\d{4,10}-\d{1,4}|G-[A-Z0-9]{10,12}/',
         ),
         'microsoft_clarity' => array(
             'label' => __( 'Microsoft Clarity', 'notrack' ),
             'opt_out_type' => 'script',
-            'parameters' => array(),
+            'parameters' => array(
+                'project_id' => '', // Clarity project ID
+            ),
             'description' => __( 'Disables Microsoft Clarity session recording and heatmap functionality.', 'notrack' ),
+            'keywords' => array('clarity', 'microsoft', 'heatmap', 'session recording'),
+            'id_pattern' => '/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/',
         ),
         'hotjar' => array(
             'label' => __( 'Hotjar', 'notrack' ),
             'opt_out_type' => 'cookie',
-            'parameters' => array(),
+            'parameters' => array(
+                'site_id' => '', // Hotjar site ID
+            ),
             'description' => __( 'Sets the _hjOptOut cookie to prevent Hotjar from collecting data.', 'notrack' ),
+            'keywords' => array('hotjar', 'heatmap', 'session recording', 'user feedback'),
+            'id_pattern' => '/\d{7,9}/',
+        ),
+        'facebook_pixel' => array(
+            'label' => __( 'Facebook Pixel', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'pixel_id' => '', // Facebook Pixel ID
+            ),
+            'description' => __( 'Prevents Facebook Pixel from tracking user activity and conversions.', 'notrack' ),
+            'keywords' => array('facebook', 'fb', 'pixel', 'meta', 'conversion'),
+            'id_pattern' => '/\d{15,16}/',
+        ),
+        'linkedin_insight' => array(
+            'label' => __( 'LinkedIn Insight Tag', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'partner_id' => '', // LinkedIn Partner ID
+            ),
+            'description' => __( 'Disables LinkedIn Insight Tag tracking for conversion and retargeting.', 'notrack' ),
+            'keywords' => array('linkedin', 'insight', 'conversion', 'professional', 'b2b'),
+            'id_pattern' => '/\d{6,8}/',
+        ),
+        'twitter_pixel' => array(
+            'label' => __( 'Twitter Pixel', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'pixel_id' => '', // Twitter Pixel ID
+            ),
+            'description' => __( 'Prevents Twitter Pixel from tracking website conversions.', 'notrack' ),
+            'keywords' => array('twitter', 'x', 'pixel', 'conversion', 'social'),
+            'id_pattern' => '/[a-z0-9]{5,10}/',
+        ),
+        'pinterest_tag' => array(
+            'label' => __( 'Pinterest Tag', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'tag_id' => '', // Pinterest Tag ID
+            ),
+            'description' => __( 'Disables Pinterest conversion tracking and audience building.', 'notrack' ),
+            'keywords' => array('pinterest', 'pin', 'tag', 'conversion', 'social'),
+            'id_pattern' => '/\d{13}/',
+        ),
+        'tiktok_pixel' => array(
+            'label' => __( 'TikTok Pixel', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'pixel_id' => '', // TikTok Pixel ID
+            ),
+            'description' => __( 'Prevents TikTok Pixel from tracking user interactions and conversions.', 'notrack' ),
+            'keywords' => array('tiktok', 'pixel', 'conversion', 'social'),
+            'id_pattern' => '/[A-Z0-9]{20}/',
+        ),
+        'snapchat_pixel' => array(
+            'label' => __( 'Snapchat Pixel', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'pixel_id' => '', // Snapchat Pixel ID
+            ),
+            'description' => __( 'Disables Snapchat Pixel tracking for conversions and audience targeting.', 'notrack' ),
+            'keywords' => array('snapchat', 'snap', 'pixel', 'conversion', 'social'),
+            'id_pattern' => '/[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}/',
+        ),
+        'hubspot' => array(
+            'label' => __( 'HubSpot', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'hub_id' => '', // HubSpot Hub ID
+            ),
+            'description' => __( 'Prevents HubSpot tracking code from collecting visitor data.', 'notrack' ),
+            'keywords' => array('hubspot', 'crm', 'marketing', 'automation'),
+            'id_pattern' => '/\d{7,8}/',
+        ),
+        'matomo' => array(
+            'label' => __( 'Matomo (Piwik)', 'notrack' ),
+            'opt_out_type' => 'cookie',
+            'parameters' => array(
+                'site_id' => '', // Matomo Site ID
+                'matomo_url' => '', // Matomo installation URL
+            ),
+            'description' => __( 'Sets the matomo_ignore cookie to prevent Matomo from tracking user activity.', 'notrack' ),
+            'keywords' => array('matomo', 'piwik', 'analytics', 'open source'),
+            'id_pattern' => '/\d{1,4}/',
+        ),
+        'intercom' => array(
+            'label' => __( 'Intercom', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'app_id' => '', // Intercom App ID
+            ),
+            'description' => __( 'Disables Intercom chat widget and user tracking functionality.', 'notrack' ),
+            'keywords' => array('intercom', 'chat', 'support', 'messaging'),
+            'id_pattern' => '/[a-z0-9]{8}/',
+        ),
+        'mixpanel' => array(
+            'label' => __( 'Mixpanel', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'project_token' => '', // Mixpanel Project Token
+            ),
+            'description' => __( 'Prevents Mixpanel from tracking user events and interactions.', 'notrack' ),
+            'keywords' => array('mixpanel', 'analytics', 'event', 'tracking'),
+            'id_pattern' => '/[a-f0-9]{32}/',
+        ),
+        'amplitude' => array(
+            'label' => __( 'Amplitude', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'api_key' => '', // Amplitude API Key
+            ),
+            'description' => __( 'Disables Amplitude analytics tracking for user behavior analysis.', 'notrack' ),
+            'keywords' => array('amplitude', 'analytics', 'behavior', 'product'),
+            'id_pattern' => '/[a-f0-9]{32}/',
+        ),
+        'segment' => array(
+            'label' => __( 'Segment', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'write_key' => '', // Segment Write Key
+            ),
+            'description' => __( 'Prevents Segment from collecting and routing user data to connected services.', 'notrack' ),
+            'keywords' => array('segment', 'analytics', 'customer data', 'integration'),
+            'id_pattern' => '/[a-zA-Z0-9]{22,32}/',
+        ),
+        'fullstory' => array(
+            'label' => __( 'FullStory', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'org_id' => '', // FullStory Org ID
+            ),
+            'description' => __( 'Disables FullStory session recording and user experience analytics.', 'notrack' ),
+            'keywords' => array('fullstory', 'session', 'recording', 'ux', 'analytics'),
+            'id_pattern' => '/[A-Z0-9]{7}/',
+        ),
+        'crazy_egg' => array(
+            'label' => __( 'Crazy Egg', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'account_id' => '', // Crazy Egg Account ID
+            ),
+            'description' => __( 'Prevents Crazy Egg from creating heatmaps and tracking user clicks.', 'notrack' ),
+            'keywords' => array('crazy egg', 'heatmap', 'click tracking', 'user behavior'),
+            'id_pattern' => '/\d{8}/',
+        ),
+        'lucky_orange' => array(
+            'label' => __( 'Lucky Orange', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'site_id' => '', // Lucky Orange Site ID
+            ),
+            'description' => __( 'Disables Lucky Orange heatmaps, recordings, and chat functionality.', 'notrack' ),
+            'keywords' => array('lucky orange', 'heatmap', 'recording', 'chat'),
+            'id_pattern' => '/\d{5,6}/',
+        ),
+        'mouseflow' => array(
+            'label' => __( 'Mouseflow', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'website_id' => '', // Mouseflow Website ID
+            ),
+            'description' => __( 'Prevents Mouseflow from recording user sessions and creating heatmaps.', 'notrack' ),
+            'keywords' => array('mouseflow', 'session', 'recording', 'heatmap'),
+            'id_pattern' => '/[a-f0-9]{32}/',
+        ),
+        'pardot' => array(
+            'label' => __( 'Pardot (Salesforce)', 'notrack' ),
+            'opt_out_type' => 'script',
+            'parameters' => array(
+                'account_id' => '', // Pardot Account ID
+                'campaign_id' => '', // Pardot Campaign ID
+            ),
+            'description' => __( 'Disables Pardot marketing automation tracking for lead generation.', 'notrack' ),
+            'keywords' => array('pardot', 'salesforce', 'marketing', 'automation', 'b2b'),
+            'id_pattern' => '/\d{10,15}/',
         ),
     );
 }
@@ -225,12 +407,254 @@ function notrack_wp_head() {
                         break;
                         
                     case 'microsoft_clarity':
-                        // All values are hardcoded, no need for escaping
+                        // Get project ID if available
+                        $project_id = isset($tracker_config['parameters']['project_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['project_id']) : '';
                         ?>
                         // Disable Microsoft Clarity
                         window['clarity'] = window['clarity'] || function() {};
                         window['clarity'].q = [];
                         window['clarity'].q.push(['disable', true]);
+                        <?php
+                        break;
+                        
+                    case 'facebook_pixel':
+                        // Get pixel ID if available
+                        $pixel_id = isset($tracker_config['parameters']['pixel_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['pixel_id']) : '';
+                        ?>
+                        // Disable Facebook Pixel
+                        window.fbq = function() {
+                            window.fbq.callMethod ? window.fbq.callMethod.apply(window.fbq, arguments) : window.fbq.queue.push(arguments);
+                        };
+                        window.fbq.push = window.fbq;
+                        window.fbq.loaded = true;
+                        window.fbq.version = '2.0';
+                        window.fbq.queue = [];
+                        window.fbq('consent', 'revoke');
+                        <?php
+                        break;
+                        
+                    case 'linkedin_insight':
+                        // Get partner ID if available
+                        $partner_id = isset($tracker_config['parameters']['partner_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['partner_id']) : '';
+                        ?>
+                        // Disable LinkedIn Insight Tag
+                        window._linkedin_data_partner_ids = [];
+                        window._linkedin_data_partner_ids.push(<?php echo esc_js($partner_id); ?>);
+                        window._linkedin_data_partner_id = null;
+                        <?php
+                        break;
+                        
+                    case 'twitter_pixel':
+                        // Get pixel ID if available
+                        $pixel_id = isset($tracker_config['parameters']['pixel_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['pixel_id']) : '';
+                        ?>
+                        // Disable Twitter Pixel
+                        window.twq = function() {
+                            window.twq.exe ? window.twq.exe.apply(window.twq, arguments) : window.twq.queue.push(arguments);
+                        };
+                        window.twq.version = '1.1';
+                        window.twq.queue = [];
+                        <?php
+                        break;
+                        
+                    case 'pinterest_tag':
+                        // Get tag ID if available
+                        $tag_id = isset($tracker_config['parameters']['tag_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['tag_id']) : '';
+                        ?>
+                        // Disable Pinterest Tag
+                        window.pintrk = function() {
+                            window.pintrk.queue.push(Array.prototype.slice.call(arguments));
+                        };
+                        window.pintrk.queue = [];
+                        window.pintrk.version = '3.0';
+                        window.pintrk('set', {
+                            np: '1'  // np = no-pinterest, disables tracking
+                        });
+                        <?php
+                        break;
+                        
+                    case 'tiktok_pixel':
+                        // Get pixel ID if available
+                        $pixel_id = isset($tracker_config['parameters']['pixel_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['pixel_id']) : '';
+                        ?>
+                        // Disable TikTok Pixel
+                        window.ttq = window.ttq || {};
+                        window.ttq.track = function() {};
+                        window.ttq.page = function() {};
+                        window.ttq.identify = function() {};
+                        window.ttq.instance = function() {};
+                        <?php
+                        break;
+                        
+                    case 'snapchat_pixel':
+                        // Get pixel ID if available
+                        $pixel_id = isset($tracker_config['parameters']['pixel_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['pixel_id']) : '';
+                        ?>
+                        // Disable Snapchat Pixel
+                        window.snaptr = function() {
+                            window.snaptr.handleRequest ? window.snaptr.handleRequest.apply(window.snaptr, arguments) : window.snaptr.queue.push(arguments);
+                        };
+                        window.snaptr.queue = [];
+                        <?php
+                        break;
+                        
+                    case 'hubspot':
+                        // Get hub ID if available
+                        $hub_id = isset($tracker_config['parameters']['hub_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['hub_id']) : '';
+                        ?>
+                        // Disable HubSpot
+                        window._hsq = window._hsq || [];
+                        window._hsq.push(['doNotTrack']);
+                        <?php
+                        break;
+                        
+                    case 'intercom':
+                        // Get app ID if available
+                        $app_id = isset($tracker_config['parameters']['app_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['app_id']) : '';
+                        ?>
+                        // Disable Intercom
+                        window.intercomSettings = {
+                            app_id: '<?php echo esc_js($app_id); ?>',
+                            hide_default_launcher: true
+                        };
+                        window.Intercom = function() {
+                            window.Intercom.q.push(arguments);
+                        };
+                        window.Intercom.q = [];
+                        window.Intercom('boot', {
+                            app_id: '<?php echo esc_js($app_id); ?>',
+                            hide_default_launcher: true
+                        });
+                        <?php
+                        break;
+                        
+                    case 'mixpanel':
+                        // Get project token if available
+                        $project_token = isset($tracker_config['parameters']['project_token']) ? 
+                            sanitize_text_field($tracker_config['parameters']['project_token']) : '';
+                        ?>
+                        // Disable Mixpanel
+                        window.mixpanel = {
+                            track: function() {},
+                            track_links: function() {},
+                            track_forms: function() {},
+                            identify: function() {},
+                            alias: function() {},
+                            people: {
+                                set: function() {},
+                                increment: function() {},
+                                track_charge: function() {}
+                            },
+                            opt_out_tracking: function() {}
+                        };
+                        window.mixpanel.opt_out_tracking();
+                        <?php
+                        break;
+                        
+                    case 'amplitude':
+                        // Get API key if available
+                        $api_key = isset($tracker_config['parameters']['api_key']) ? 
+                            sanitize_text_field($tracker_config['parameters']['api_key']) : '';
+                        ?>
+                        // Disable Amplitude
+                        window.amplitude = {
+                            getInstance: function() {
+                                return {
+                                    init: function() {},
+                                    logEvent: function() {},
+                                    setUserId: function() {},
+                                    setUserProperties: function() {}
+                                };
+                            }
+                        };
+                        <?php
+                        break;
+                        
+                    case 'segment':
+                        // Get write key if available
+                        $write_key = isset($tracker_config['parameters']['write_key']) ? 
+                            sanitize_text_field($tracker_config['parameters']['write_key']) : '';
+                        ?>
+                        // Disable Segment
+                        window.analytics = {
+                            track: function() {},
+                            trackLink: function() {},
+                            trackForm: function() {},
+                            identify: function() {},
+                            page: function() {},
+                            group: function() {},
+                            alias: function() {},
+                            ready: function() {}
+                        };
+                        <?php
+                        break;
+                        
+                    case 'fullstory':
+                        // Get org ID if available
+                        $org_id = isset($tracker_config['parameters']['org_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['org_id']) : '';
+                        ?>
+                        // Disable FullStory
+                        window['_fs_host'] = 'www.fullstory.com';
+                        window['_fs_script'] = 'edge.fullstory.com/s/fs.js';
+                        window['_fs_org'] = '<?php echo esc_js($org_id); ?>';
+                        window['_fs_namespace'] = 'FS';
+                        window['_fs_run_in_iframe'] = true;
+                        window['_fs_capture'] = false;
+                        <?php
+                        break;
+                        
+                    case 'crazy_egg':
+                        // Get account ID if available
+                        $account_id = isset($tracker_config['parameters']['account_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['account_id']) : '';
+                        ?>
+                        // Disable Crazy Egg
+                        window.CE2 = null;
+                        window._ceiq = null;
+                        <?php
+                        break;
+                        
+                    case 'lucky_orange':
+                        // Get site ID if available
+                        $site_id = isset($tracker_config['parameters']['site_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['site_id']) : '';
+                        ?>
+                        // Disable Lucky Orange
+                        window.__lo_site_id = <?php echo esc_js($site_id); ?>;
+                        window.__wtw_lucky_site_id = window.__lo_site_id;
+                        window.__lo_disable = true;
+                        <?php
+                        break;
+                        
+                    case 'mouseflow':
+                        // Get website ID if available
+                        $website_id = isset($tracker_config['parameters']['website_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['website_id']) : '';
+                        ?>
+                        // Disable Mouseflow
+                        window._mfq = window._mfq || [];
+                        window._mfq.push(['setVariable', 'disabled', true]);
+                        <?php
+                        break;
+                        
+                    case 'pardot':
+                        // Get account ID if available
+                        $account_id = isset($tracker_config['parameters']['account_id']) ? 
+                            sanitize_text_field($tracker_config['parameters']['account_id']) : '';
+                        ?>
+                        // Disable Pardot
+                        window.piAId = '<?php echo esc_js($account_id); ?>';
+                        window.piDisable = true;
                         <?php
                         break;
                         

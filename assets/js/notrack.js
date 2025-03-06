@@ -71,7 +71,90 @@
                         setCookie('clarity_opt_out', 'true', 31536000, '/');
                         break;
                         
-                    // Add more trackers as needed
+                    case 'facebook_pixel':
+                        // Set Facebook Pixel opt-out cookie
+                        setCookie('fb_pixel_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'linkedin_insight':
+                        // Set LinkedIn Insight opt-out cookie
+                        setCookie('li_insight_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'twitter_pixel':
+                        // Set Twitter Pixel opt-out cookie
+                        setCookie('twitter_pixel_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'pinterest_tag':
+                        // Set Pinterest Tag opt-out cookie
+                        setCookie('pinterest_tag_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'tiktok_pixel':
+                        // Set TikTok Pixel opt-out cookie
+                        setCookie('tiktok_pixel_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'snapchat_pixel':
+                        // Set Snapchat Pixel opt-out cookie
+                        setCookie('snapchat_pixel_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'hubspot':
+                        // Set HubSpot opt-out cookie
+                        setCookie('__hs_opt_out', 'yes', 31536000, '/');
+                        break;
+                        
+                    case 'matomo':
+                        // Set Matomo opt-out cookie
+                        setCookie('matomo_ignore', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'intercom':
+                        // Set Intercom opt-out cookie
+                        setCookie('intercom_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'mixpanel':
+                        // Set Mixpanel opt-out cookie
+                        setCookie('mp_optout', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'amplitude':
+                        // Set Amplitude opt-out cookie
+                        setCookie('amplitude_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'segment':
+                        // Set Segment opt-out cookie
+                        setCookie('segment_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'fullstory':
+                        // Set FullStory opt-out cookie
+                        setCookie('fs_optout', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'crazy_egg':
+                        // Set Crazy Egg opt-out cookie
+                        setCookie('crazy_egg_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'lucky_orange':
+                        // Set Lucky Orange opt-out cookie
+                        setCookie('lo_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'mouseflow':
+                        // Set Mouseflow opt-out cookie
+                        setCookie('mouseflow_opt_out', 'true', 31536000, '/');
+                        break;
+                        
+                    case 'pardot':
+                        // Set Pardot opt-out cookie
+                        setCookie('pardot_opt_out', 'true', 31536000, '/');
+                        break;
                 }
             });
         }
@@ -135,6 +218,74 @@
                                     
                                 case 'microsoft_clarity':
                                     document.cookie = 'clarity_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'facebook_pixel':
+                                    document.cookie = 'fb_pixel_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'linkedin_insight':
+                                    document.cookie = 'li_insight_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'twitter_pixel':
+                                    document.cookie = 'twitter_pixel_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'pinterest_tag':
+                                    document.cookie = 'pinterest_tag_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'tiktok_pixel':
+                                    document.cookie = 'tiktok_pixel_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'snapchat_pixel':
+                                    document.cookie = 'snapchat_pixel_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'hubspot':
+                                    document.cookie = '__hs_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'matomo':
+                                    document.cookie = 'matomo_ignore=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'intercom':
+                                    document.cookie = 'intercom_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'mixpanel':
+                                    document.cookie = 'mp_optout=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'amplitude':
+                                    document.cookie = 'amplitude_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'segment':
+                                    document.cookie = 'segment_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'fullstory':
+                                    document.cookie = 'fs_optout=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'crazy_egg':
+                                    document.cookie = 'crazy_egg_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'lucky_orange':
+                                    document.cookie = 'lo_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'mouseflow':
+                                    document.cookie = 'mouseflow_opt_out=; max-age=0; path=/;';
+                                    break;
+                                    
+                                case 'pardot':
+                                    document.cookie = 'pardot_opt_out=; max-age=0; path=/;';
                                     break;
                             }
                         });
