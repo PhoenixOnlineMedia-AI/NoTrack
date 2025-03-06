@@ -1374,35 +1374,25 @@ class NoTrack {
     }
 
     /**
-     * Scan for trackers in theme and plugin files
-     *
-     * This method wraps the notrack_scan_files_for_trackers function and adds
-     * additional processing or caching if needed.
+     * Scan for trackers
      *
      * @since 1.0.0
      * @return array Array of detected trackers
      */
     public function scan_for_trackers() {
-        // Check if we have cached results less than 1 hour old
-        $cached_results = get_transient('notrack_scan_results');
-        if (false !== $cached_results) {
-            return $cached_results;
+        // Check if we have cached results and no rescan was requested
+        $rescan = isset($_GET['rescan']) && $_GET['rescan'] === '1';
+        $cached_trackers = get_transient('notrack_detected_trackers');
+        
+        if (!$rescan && $cached_trackers !== false) {
+            return $cached_trackers;
         }
         
-        // Perform the file scan
-        $file_trackers = notrack_scan_files_for_trackers();
-        
-        // Perform the header scan
-        $header_trackers = notrack_scan_headers_for_trackers();
-        
-        // Perform the HTML body scan
-        $body_trackers = notrack_scan_body_for_trackers();
-        
-        // Combine results
-        $detected_trackers = array_merge($file_trackers, $header_trackers, $body_trackers);
+        // Use the consolidated detection function
+        $detected_trackers = notrack_detect_tracking_tools();
         
         // Cache the results for 1 hour
-        set_transient('notrack_scan_results', $detected_trackers, HOUR_IN_SECONDS);
+        set_transient('notrack_detected_trackers', $detected_trackers, HOUR_IN_SECONDS);
         
         return $detected_trackers;
     }
@@ -1410,277 +1400,210 @@ class NoTrack {
     /**
      * Enable detected trackers
      *
-     * This method enables opt-out for tracking services that were detected
-     * by the scanner. It updates the plugin settings to include these trackers.
-     *
      * @since 1.0.0
      * @return int Number of trackers enabled
      */
     public function enable_detected_trackers() {
-        // Get current settings
-        $current_trackers = get_option('notrack_trackers', array());
+        // Get detected trackers from the option
+        $detected_trackers = get_option('notrack_detected_tools', array());
+        if (empty($detected_trackers)) {
+            return 0;
+        }
         
-        // Get detected trackers
-        $detected_trackers = $this->scan_for_trackers();
+        // Get current settings
+        $options = get_option('notrack_options', array());
+        if (!isset($options['trackers'])) {
+            $options['trackers'] = array();
+        }
         
         // Count how many new trackers we enable
         $enabled_count = 0;
         
-        // Process each detected tracker
+        // Loop through detected trackers
         foreach ($detected_trackers as $tracker) {
-            $service_id = $tracker['service'];
+            $service = $tracker['service'];
             
             // Skip if already enabled
-            if (isset($current_trackers[$service_id]['enabled']) && $current_trackers[$service_id]['enabled']) {
+            if (isset($options['trackers'][$service]) && $options['trackers'][$service]['enabled']) {
+                continue;
+            }
+            
+            // Get tracking service data
+            $tracking_services = notrack_get_supported_trackers();
+            if (!isset($tracking_services[$service])) {
                 continue;
             }
             
             // Enable this tracker
-            $current_trackers[$service_id]['enabled'] = true;
-            
-            // Set parameters if ID was detected
-            if (!empty($tracker['id'])) {
-                // Get tracking services data to determine parameter name
-                $tracking_services = notrack_get_supported_trackers();
+            if (!isset($options['trackers'][$service])) {
+                $options['trackers'][$service] = array(
+                    'enabled' => true,
+                    'id' => !empty($tracker['id']) ? $tracker['id'] : '',
+                    'opt_out_type' => $tracking_services[$service]['opt_out_type'],
+                );
+            } else {
+                $options['trackers'][$service]['enabled'] = true;
                 
-                if (isset($tracking_services[$service_id]['parameters'])) {
-                    // Get the first parameter key (usually the ID field)
-                    $param_keys = array_keys($tracking_services[$service_id]['parameters']);
-                    if (!empty($param_keys)) {
-                        $id_param = $param_keys[0];
-                        
-                        // Initialize parameters array if needed
-                        if (!isset($current_trackers[$service_id]['parameters'])) {
-                            $current_trackers[$service_id]['parameters'] = array();
-                        }
-                        
-                        // Set the ID parameter
-                        $current_trackers[$service_id]['parameters'][$id_param] = sanitize_text_field($tracker['id']);
-                    }
+                // Update ID if we found one and none was set
+                if (!empty($tracker['id']) && empty($options['trackers'][$service]['id'])) {
+                    $options['trackers'][$service]['id'] = $tracker['id'];
                 }
             }
             
             $enabled_count++;
         }
         
-        // Save updated settings
-        if ($enabled_count > 0) {
-            update_option('notrack_trackers', $current_trackers);
-        }
+        // Save updated options
+        update_option('notrack_options', $options);
         
         return $enabled_count;
     }
     
     /**
-     * Render the tracker scanner page
-     *
-     * Displays the results of scanning theme and plugin files for tracking services.
-     * This helps administrators identify trackers that might be present in their
-     * WordPress installation.
+     * Display the scanner page
      *
      * @since 1.0.0
-     * @return void
      */
     public function scanner_page() {
-        // Check user capabilities
-        if (!current_user_can('manage_options')) {
-            return;
+        // Check if we need to run a manual scan
+        if (isset($_GET['action']) && $_GET['action'] === 'scan') {
+            check_admin_referer('notrack_manual_scan');
+            notrack_detect_tracking_tools();
+            wp_redirect(admin_url('admin.php?page=notrack-scanner&scan=complete'));
+            exit;
         }
-        
-        // Process form submission to clear cache and rescan
-        $rescan = isset($_POST['notrack_rescan']) && wp_verify_nonce($_POST['notrack_scanner_nonce'], 'notrack_scanner');
-        if ($rescan) {
-            delete_transient('notrack_scan_results');
-        }
-        
-        // Process form submission to enable detected trackers
-        $enable_trackers = isset($_POST['notrack_enable_trackers']) && wp_verify_nonce($_POST['notrack_scanner_nonce'], 'notrack_scanner');
-        $enabled_count = 0;
-        if ($enable_trackers) {
-            $enabled_count = $this->enable_detected_trackers();
-        }
-        
-        // Get tracking services for reference
-        $tracking_services = notrack_get_supported_trackers();
-        
-        // Get scan results
+
+        // Get detected trackers
         $detected_trackers = $this->scan_for_trackers();
         
-        // Group trackers by service
-        $grouped_trackers = array();
-        foreach ($detected_trackers as $tracker) {
-            $service = $tracker['service'];
-            if (!isset($grouped_trackers[$service])) {
-                $grouped_trackers[$service] = array();
-            }
-            $grouped_trackers[$service][] = $tracker;
-        }
+        // Get the last scan time
+        $last_scan_time = get_option('notrack_last_scan_time', 0);
+        $last_scan_date = $last_scan_time ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $last_scan_time) : __('Never', 'notrack');
         
-        // Begin page output
+        // Get next scheduled scan
+        $next_scan = wp_next_scheduled('notrack_scan');
+        $next_scan_date = $next_scan ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_scan) : __('Not scheduled', 'notrack');
+        
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+            <h1><?php echo esc_html__('NoTrack Scanner', 'notrack'); ?></h1>
+            
+            <?php if (isset($_GET['scan']) && $_GET['scan'] === 'complete'): ?>
+            <div class="notice notice-success is-dismissible">
+                <p><?php echo esc_html__('Scan completed successfully!', 'notrack'); ?></p>
+            </div>
+            <?php endif; ?>
+            
+            <div class="notrack-scan-info">
+                <p>
+                    <strong><?php echo esc_html__('Last scan:', 'notrack'); ?></strong> 
+                    <?php echo esc_html($last_scan_date); ?>
+                </p>
+                <p>
+                    <strong><?php echo esc_html__('Next scheduled scan:', 'notrack'); ?></strong> 
+                    <?php echo esc_html($next_scan_date); ?>
+                </p>
+                <p>
+                    <a href="<?php echo esc_url(wp_nonce_url(admin_url('admin.php?page=notrack-scanner&action=scan'), 'notrack_manual_scan')); ?>" class="button button-primary">
+                        <?php echo esc_html__('Run Manual Scan', 'notrack'); ?>
+                    </a>
+                </p>
+            </div>
+            
+            <h2><?php echo esc_html__('Detected Tracking Services', 'notrack'); ?></h2>
+            
+            <?php if (empty($detected_trackers)): ?>
+                <p><?php echo esc_html__('No tracking services detected.', 'notrack'); ?></p>
+            <?php else: ?>
+                <p><?php echo esc_html__('The following tracking services were detected on your site:', 'notrack'); ?></p>
+                
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th><?php echo esc_html__('Service', 'notrack'); ?></th>
+                            <th><?php echo esc_html__('Detection Method', 'notrack'); ?></th>
+                            <th><?php echo esc_html__('Location', 'notrack'); ?></th>
+                            <th><?php echo esc_html__('Actions', 'notrack'); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($detected_trackers as $tracker): ?>
+                            <tr>
+                                <td>
+                                    <strong><?php echo esc_html($tracker['service']); ?></strong>
+                                    <?php if (!empty($tracker['id'])): ?>
+                                        <br><small><?php echo esc_html__('ID:', 'notrack'); ?> <?php echo esc_html($tracker['id']); ?></small>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="notrack-method-<?php echo esc_attr($tracker['detection_method']); ?>">
+                                    <?php 
+                                    $method = $tracker['detection_method'];
+                                    if ($method === 'file') {
+                                        echo esc_html__('File Scan', 'notrack');
+                                    } elseif ($method === 'header') {
+                                        echo esc_html__('HTTP Header', 'notrack');
+                                    } elseif ($method === 'external_html') {
+                                        echo esc_html__('HTML Content', 'notrack');
+                                    } else {
+                                        echo esc_html($method);
+                                    }
+                                    ?>
+                                </td>
+                                <td>
+                                    <?php 
+                                    if ($tracker['detection_method'] === 'file') {
+                                        echo esc_html($tracker['file']);
+                                    } elseif ($tracker['detection_method'] === 'header') {
+                                        echo esc_html($tracker['header_name'] . ': ' . $tracker['header_value']);
+                                    } elseif ($tracker['detection_method'] === 'external_html') {
+                                        // Create a variable to hold element info
+                                        $element_info = '';
+                                        if (!empty($tracker['element_type'])) {
+                                            $element_info = '<' . esc_html($tracker['element_type']) . '> ';
+                                        }
+                                        $element_info .= esc_html($tracker['element_data']);
+                                        echo $element_info;
+                                    }
+                                    ?>
+                                </td>
+                                <td>
+                                    <a href="<?php echo esc_url(admin_url('admin.php?page=notrack-settings&enable=' . urlencode($tracker['service']))); ?>" class="button button-small">
+                                        <?php echo esc_html__('Enable Opt-Out', 'notrack'); ?>
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                
+                <p>
+                    <a href="<?php echo esc_url(admin_url('admin.php?page=notrack-settings&enable=all')); ?>" class="button button-primary">
+                        <?php echo esc_html__('Enable All Opt-Outs', 'notrack'); ?>
+                    </a>
+                </p>
+            <?php endif; ?>
             
             <style>
-                .notrack-detection-method {
-                    display: inline-block;
-                    padding: 3px 8px;
-                    border-radius: 3px;
-                    font-size: 12px;
-                    font-weight: bold;
-                    margin-bottom: 4px;
+                .notrack-scan-info {
+                    background: #f9f9f9;
+                    border: 1px solid #ccd0d4;
+                    padding: 15px;
+                    margin: 20px 0;
+                    border-radius: 4px;
                 }
-                .notrack-method-file_scan {
-                    background-color: #e7f5ff;
+                .notrack-method-file {
+                    background-color: #e6f7ff;
                     color: #0073aa;
-                    border: 1px solid #0073aa;
                 }
                 .notrack-method-header {
                     background-color: #f0f7e6;
-                    color: #46b450;
-                    border: 1px solid #46b450;
+                    color: #5e8000;
                 }
                 .notrack-method-external_html {
-                    background-color: #f9f0ff;
-                    color: #826eb4;
-                    border: 1px solid #826eb4;
-                }
-                .notrack-scan-results ul {
-                    margin: 0;
-                    padding-left: 20px;
-                }
-                .notrack-scan-results td {
-                    vertical-align: top;
+                    background-color: #f7e6f7;
+                    color: #800080;
                 }
             </style>
-            
-            <p><?php _e('This page shows tracking services detected in your theme and active plugins. The scanner looks for keywords and patterns associated with common tracking services.', 'notrack'); ?></p>
-            
-            <?php if ($enabled_count > 0): ?>
-                <div class="notice notice-success">
-                    <p><?php printf(_n('%d tracking service has been enabled for opt-out.', '%d tracking services have been enabled for opt-out.', $enabled_count, 'notrack'), $enabled_count); ?></p>
-                </div>
-            <?php endif; ?>
-            
-            <form method="post" action="">
-                <?php wp_nonce_field('notrack_scanner', 'notrack_scanner_nonce'); ?>
-                <p>
-                    <input type="submit" name="notrack_rescan" class="button button-primary" value="<?php esc_attr_e('Rescan Files', 'notrack'); ?>">
-                    
-                    <?php if (!empty($detected_trackers)): ?>
-                        <input type="submit" name="notrack_enable_trackers" class="button" value="<?php esc_attr_e('Enable Detected Trackers', 'notrack'); ?>">
-                    <?php endif; ?>
-                    
-                    <a href="<?php echo esc_url(admin_url('options-general.php?page=notrack')); ?>" class="button">
-                        <?php _e('Back to Settings', 'notrack'); ?>
-                    </a>
-                </p>
-            </form>
-            
-            <div class="notrack-scan-results">
-                <?php if (empty($detected_trackers)): ?>
-                    <div class="notice notice-success">
-                        <p><?php _e('No tracking services were detected in your theme and active plugins.', 'notrack'); ?></p>
-                    </div>
-                <?php else: ?>
-                    <h2><?php printf(_n('%d tracking service detected', '%d tracking services detected', count($grouped_trackers), 'notrack'), count($grouped_trackers)); ?></h2>
-                    
-                    <table class="wp-list-table widefat fixed striped">
-                        <thead>
-                            <tr>
-                                <th><?php _e('Tracking Service', 'notrack'); ?></th>
-                                <th><?php _e('Detection Method', 'notrack'); ?></th>
-                                <th><?php _e('Location', 'notrack'); ?></th>
-                                <th><?php _e('IDs Found', 'notrack'); ?></th>
-                                <th><?php _e('Actions', 'notrack'); ?></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($grouped_trackers as $service => $trackers): ?>
-                                <tr>
-                                    <td>
-                                        <strong><?php echo esc_html($tracking_services[$service]['label']); ?></strong>
-                                        <p class="description"><?php echo esc_html($tracking_services[$service]['description']); ?></p>
-                                    </td>
-                                    <td>
-                                        <?php 
-                                        $methods = array_unique(array_column($trackers, 'detection_method'));
-                                        foreach ($methods as $method): 
-                                            echo '<span class="notrack-detection-method notrack-method-' . esc_attr($method) . '">';
-                                            if ($method === 'file_scan') {
-                                                echo esc_html__('File Scan', 'notrack');
-                                            } elseif ($method === 'header') {
-                                                echo esc_html__('HTTP Header', 'notrack');
-                                            } elseif ($method === 'external_html') {
-                                                echo esc_html__('HTML Content', 'notrack');
-                                            } else {
-                                                echo esc_html($method);
-                                            }
-                                            echo '</span><br>';
-                                        endforeach;
-                                        ?>
-                                    </td>
-                                    <td>
-                                        <ul>
-                                            <?php 
-                                            foreach ($trackers as $tracker): 
-                                                if ($tracker['detection_method'] === 'file_scan' && !empty($tracker['file'])):
-                                            ?>
-                                                <li><?php echo esc_html($tracker['file']); ?></li>
-                                            <?php 
-                                                elseif ($tracker['detection_method'] === 'header' && !empty($tracker['header'])):
-                                                    $header_info = $tracker['header'];
-                                                    if (!empty($tracker['value'])) {
-                                                        $header_info .= ': ' . (strlen($tracker['value']) > 50 ? substr($tracker['value'], 0, 47) . '...' : $tracker['value']);
-                                                    }
-                                            ?>
-                                                <li><?php echo esc_html($header_info); ?></li>
-                                            <?php 
-                                                elseif ($tracker['detection_method'] === 'external_html' && !empty($tracker['element_data'])):
-                                                    $element_info = '';
-                                                    if (!empty($tracker['element_type'])) {
-                                                        $element_info = '<' . $tracker['element_type'] . '> ';
-                                                    }
-                                                    $element_info .= $tracker['element_data'];
-                                            ?>
-                                                <li><?php echo esc_html($element_info); ?></li>
-                                            <?php 
-                                                endif;
-                                            endforeach; 
-                                            ?>
-                                        </ul>
-                                    </td>
-                                    <td>
-                                        <?php 
-                                        $ids = array();
-                                        foreach ($trackers as $tracker) {
-                                            if (!empty($tracker['id'])) {
-                                                $ids[] = $tracker['id'];
-                                            }
-                                        }
-                                        
-                                        if (!empty($ids)): 
-                                        ?>
-                                            <ul>
-                                                <?php foreach (array_unique($ids) as $id): ?>
-                                                    <li><?php echo esc_html($id); ?></li>
-                                                <?php endforeach; ?>
-                                            </ul>
-                                        <?php else: ?>
-                                            <em><?php _e('No IDs detected', 'notrack'); ?></em>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <a href="<?php echo esc_url(admin_url('options-general.php?page=notrack')); ?>" class="button">
-                                            <?php _e('Configure Opt-Out', 'notrack'); ?>
-                                        </a>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
-            </div>
         </div>
         <?php
     }
@@ -2285,6 +2208,94 @@ function scan_content_for_trackers($content, $tracking_services, &$detected_trac
                 break; // No need to check other keywords for this service
             }
         }
+    }
+}
+
+/**
+ * Consolidates results from all scanning methods and saves to options
+ * 
+ * This function runs all three scanning methods (files, headers, and HTML body),
+ * combines the results into a unique list of detected trackers, and saves
+ * the results to the 'notrack_detected_tools' option.
+ * 
+ * @since 1.0.0
+ * @return array Array of detected trackers
+ */
+function notrack_detect_tracking_tools() {
+    // Get tracking services
+    $tracking_services = notrack_get_supported_trackers();
+    
+    // Run all three scanning methods
+    $file_trackers = notrack_scan_files_for_trackers();
+    $header_trackers = notrack_scan_headers_for_trackers();
+    $body_trackers = notrack_scan_body_for_trackers();
+    
+    // Merge results from all scanning methods
+    $all_trackers = array_merge($file_trackers, $header_trackers, $body_trackers);
+    
+    // Create a unique list based on service name
+    $unique_trackers = array();
+    $tracker_names = array();
+    
+    foreach ($all_trackers as $tracker) {
+        if (!in_array($tracker['service'], $tracker_names)) {
+            $tracker_names[] = $tracker['service'];
+            $unique_trackers[] = $tracker;
+        }
+    }
+    
+    // Save the results to the options table
+    update_option('notrack_detected_tools', $unique_trackers, false);
+    
+    // Log the scan time
+    update_option('notrack_last_scan_time', current_time('timestamp'), false);
+    
+    return $unique_trackers;
+}
+
+/**
+ * Callback function for the scheduled scan event
+ * 
+ * @since 1.0.0
+ */
+function notrack_scheduled_scan_callback() {
+    notrack_detect_tracking_tools();
+}
+
+// Register the scheduled event on plugin activation
+register_activation_hook(__FILE__, 'notrack_schedule_tracking_scan');
+
+/**
+ * Schedule the weekly tracking scan on plugin activation
+ * 
+ * @since 1.0.0
+ */
+function notrack_schedule_tracking_scan() {
+    // Make sure the event is not already scheduled
+    if (!wp_next_scheduled('notrack_scan')) {
+        // Schedule the event to run weekly
+        wp_schedule_event(time(), 'weekly', 'notrack_scan');
+    }
+    
+    // Run an initial scan on activation
+    notrack_detect_tracking_tools();
+}
+
+// Hook the scheduled scan to our callback function
+add_action('notrack_scan', 'notrack_scheduled_scan_callback');
+
+// Clean up scheduled events on plugin deactivation
+register_deactivation_hook(__FILE__, 'notrack_clear_scheduled_scan');
+
+/**
+ * Clear the scheduled scan event on plugin deactivation
+ * 
+ * @since 1.0.0
+ */
+function notrack_clear_scheduled_scan() {
+    $timestamp = wp_next_scheduled('notrack_scan');
+    if ($timestamp) {
+        wp_unschedule_event($timestamp, 'notrack_scan');
     }
 }
 
