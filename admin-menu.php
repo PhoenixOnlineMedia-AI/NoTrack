@@ -88,6 +88,9 @@ function notrack_settings_page() {
     $options = get_option('notrack_options', array());
     $enabled_trackers = isset($options['trackers']) ? $options['trackers'] : array();
     
+    // Get custom triggers
+    $custom_triggers = get_option('notrack_custom_triggers', '');
+    
     // Get supported trackers data
     $supported_trackers = notrack_get_supported_trackers();
     
@@ -110,6 +113,10 @@ function notrack_settings_page() {
         // Update options
         $options['trackers'] = $updated_trackers;
         update_option('notrack_options', $options);
+        
+        // Update custom triggers
+        $custom_triggers = isset($_POST['notrack_custom_triggers']) ? sanitize_text_field($_POST['notrack_custom_triggers']) : '';
+        update_option('notrack_custom_triggers', $custom_triggers);
         
         // Show success message
         echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Settings saved successfully!', 'notrack') . '</p></div>';
@@ -164,6 +171,21 @@ function notrack_settings_page() {
                             </td>
                         </tr>
                     <?php endforeach; ?>
+                    
+                    <!-- Custom Trigger Selectors Field -->
+                    <tr>
+                        <th scope="row">
+                            <label for="notrack-custom-triggers">
+                                <?php echo esc_html__('Custom Trigger Selectors', 'notrack'); ?>
+                            </label>
+                        </th>
+                        <td>
+                            <textarea name="notrack_custom_triggers" id="notrack-custom-triggers" class="large-text code" rows="5"><?php echo esc_textarea($custom_triggers); ?></textarea>
+                            <p class="description">
+                                <?php echo esc_html__('Enter CSS selectors for elements that should trigger the opt-out when clicked. Separate multiple selectors with commas. Example: .privacy-button, #opt-out-link', 'notrack'); ?>
+                            </p>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
             

@@ -295,6 +295,29 @@
                     window.location.reload();
                 }
             });
+            
+            // Attach event listeners to custom trigger selectors if available
+            if (typeof notrack_data !== 'undefined' && notrack_data.custom_triggers) {
+                try {
+                    // Get custom selectors from the data
+                    var customSelectors = notrack_data.custom_triggers;
+                    
+                    // Find all elements matching the custom selectors
+                    var customTriggers = document.querySelectorAll(customSelectors);
+                    
+                    // Attach click event listeners to each custom trigger
+                    customTriggers.forEach(function(element) {
+                        element.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            
+                            // Call the opt-out function
+                            notrack_opt_out();
+                        });
+                    });
+                } catch (error) {
+                    console.error('NoTrack: Error setting up custom trigger selectors', error);
+                }
+            }
         },
 
         /**

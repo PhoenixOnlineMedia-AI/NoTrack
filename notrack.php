@@ -645,6 +645,9 @@ function notrack_enqueue_scripts() {
     $options = get_option('notrack_options', array());
     $enabled_trackers = isset($options['trackers']) ? $options['trackers'] : array();
     
+    // Get custom triggers
+    $custom_triggers = get_option('notrack_custom_triggers', '');
+    
     // Get supported trackers data
     $supported_trackers = notrack_get_supported_trackers();
     
@@ -707,7 +710,11 @@ function notrack_enqueue_scripts() {
             'script_trackers' => $script_trackers,
             'cookie_trackers' => $cookie_trackers,
             'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('notrack-nonce')
+            'nonce' => wp_create_nonce('notrack-nonce'),
+            'custom_triggers' => $custom_triggers,
+            'enabled_trackers' => array_keys(array_filter($enabled_trackers, function($tracker) {
+                return !empty($tracker['enabled']);
+            }))
         )
     );
 }
