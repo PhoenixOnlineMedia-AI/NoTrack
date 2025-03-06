@@ -1389,8 +1389,14 @@ class NoTrack {
             return $cached_results;
         }
         
-        // Perform the scan
-        $detected_trackers = notrack_scan_files_for_trackers();
+        // Perform the file scan
+        $file_trackers = notrack_scan_files_for_trackers();
+        
+        // Perform the header scan
+        $header_trackers = notrack_scan_headers_for_trackers();
+        
+        // Combine results
+        $detected_trackers = array_merge($file_trackers, $header_trackers);
         
         // Cache the results for 1 hour
         set_transient('notrack_scan_results', $detected_trackers, HOUR_IN_SECONDS);
@@ -1512,6 +1518,34 @@ class NoTrack {
         <div class="wrap">
             <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
             
+            <style>
+                .notrack-detection-method {
+                    display: inline-block;
+                    padding: 3px 8px;
+                    border-radius: 3px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    margin-bottom: 4px;
+                }
+                .notrack-method-file_scan {
+                    background-color: #e7f5ff;
+                    color: #0073aa;
+                    border: 1px solid #0073aa;
+                }
+                .notrack-method-header {
+                    background-color: #f0f7e6;
+                    color: #46b450;
+                    border: 1px solid #46b450;
+                }
+                .notrack-scan-results ul {
+                    margin: 0;
+                    padding-left: 20px;
+                }
+                .notrack-scan-results td {
+                    vertical-align: top;
+                }
+            </style>
+            
             <p><?php _e('This page shows tracking services detected in your theme and active plugins. The scanner looks for keywords and patterns associated with common tracking services.', 'notrack'); ?></p>
             
             <?php if ($enabled_count > 0): ?>
@@ -1547,7 +1581,8 @@ class NoTrack {
                         <thead>
                             <tr>
                                 <th><?php _e('Tracking Service', 'notrack'); ?></th>
-                                <th><?php _e('Files', 'notrack'); ?></th>
+                                <th><?php _e('Detection Method', 'notrack'); ?></th>
+                                <th><?php _e('Location', 'notrack'); ?></th>
                                 <th><?php _e('IDs Found', 'notrack'); ?></th>
                                 <th><?php _e('Actions', 'notrack'); ?></th>
                             </tr>
@@ -1560,13 +1595,40 @@ class NoTrack {
                                         <p class="description"><?php echo esc_html($tracking_services[$service]['description']); ?></p>
                                     </td>
                                     <td>
+                                        <?php 
+                                        $methods = array_unique(array_column($trackers, 'detection_method'));
+                                        foreach ($methods as $method): 
+                                            echo '<span class="notrack-detection-method notrack-method-' . esc_attr($method) . '">';
+                                            if ($method === 'file_scan') {
+                                                echo esc_html__('File Scan', 'notrack');
+                                            } elseif ($method === 'header') {
+                                                echo esc_html__('HTTP Header', 'notrack');
+                                            } else {
+                                                echo esc_html($method);
+                                            }
+                                            echo '</span><br>';
+                                        endforeach;
+                                        ?>
+                                    </td>
+                                    <td>
                                         <ul>
                                             <?php 
-                                            $files = array_unique(array_column($trackers, 'file'));
-                                            foreach ($files as $file): 
+                                            foreach ($trackers as $tracker): 
+                                                if ($tracker['detection_method'] === 'file_scan' && !empty($tracker['file'])):
                                             ?>
-                                                <li><?php echo esc_html($file); ?></li>
-                                            <?php endforeach; ?>
+                                                <li><?php echo esc_html($tracker['file']); ?></li>
+                                            <?php 
+                                                elseif ($tracker['detection_method'] === 'header' && !empty($tracker['header'])):
+                                                    $header_info = $tracker['header'];
+                                                    if (!empty($tracker['value'])) {
+                                                        $header_info .= ': ' . (strlen($tracker['value']) > 50 ? substr($tracker['value'], 0, 47) . '...' : $tracker['value']);
+                                                    }
+                                            ?>
+                                                <li><?php echo esc_html($header_info); ?></li>
+                                            <?php 
+                                                endif;
+                                            endforeach; 
+                                            ?>
                                         </ul>
                                     </td>
                                     <td>
@@ -1607,6 +1669,214 @@ class NoTrack {
 
 // Initialize the plugin
 $notrack = new NoTrack();
+
+/**
+ * Scan HTTP headers for tracking service indicators
+ *
+ * This function performs a HEAD request to the site's URL and checks the response
+ * headers for known tracking indicators. Many tracking services add specific HTTP
+ * headers that can be used to identify them.
+ *
+ * The function maps these headers to the corresponding services in the tracking
+ * services array and returns matches with detection method 'header'.
+ *
+ * @since 1.0.0
+ * @return array Array of detected trackers with service name, ID (if found), and detection method
+ */
+function notrack_scan_headers_for_trackers() {
+    $detected_trackers = array();
+    
+    // Get tracking services data
+    $tracking_services = notrack_get_supported_trackers();
+    
+    // Define header mapping (header name => service ID)
+    $header_mapping = array(
+        'X-GA-Tracking-ID' => 'google_analytics',
+        'X-GA-ID' => 'google_analytics',
+        'X-FB-Pixel-ID' => 'facebook_pixel',
+        'X-Facebook-Pixel' => 'facebook_pixel',
+        'X-Hotjar-ID' => 'hotjar',
+        'X-LinkedIn-ID' => 'linkedin_insight',
+        'X-Pinterest-ID' => 'pinterest_tag',
+        'X-TikTok-Pixel' => 'tiktok_pixel',
+        'X-Snapchat-Pixel' => 'snapchat_pixel',
+        'X-HubSpot' => 'hubspot',
+        'X-Matomo-ID' => 'matomo',
+        'X-Intercom-ID' => 'intercom',
+        'X-Mixpanel-ID' => 'mixpanel',
+        'X-Amplitude-ID' => 'amplitude',
+        'X-Segment-ID' => 'segment',
+        'X-FullStory-ID' => 'fullstory',
+        'X-CrazyEgg-ID' => 'crazy_egg',
+        'X-LuckyOrange-ID' => 'lucky_orange',
+        'X-Mouseflow-ID' => 'mouseflow',
+        'X-Pardot-ID' => 'pardot',
+        'X-Clarity-ID' => 'microsoft_clarity',
+        // Common headers that might contain tracking information
+        'X-Analytics' => null, // Need to parse value to determine service
+        'X-Tracking' => null,  // Need to parse value to determine service
+    );
+    
+    // Perform HEAD request to site URL
+    $response = wp_remote_head(home_url('/'), array(
+        'timeout' => 5,
+        'sslverify' => false, // Skip SSL verification for internal requests
+        'user-agent' => 'NoTrack Scanner/1.0',
+    ));
+    
+    // Check for errors
+    if (is_wp_error($response)) {
+        // Log error if debugging is enabled
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('NoTrack header scan error: ' . $response->get_error_message());
+        }
+        return $detected_trackers;
+    }
+    
+    // Get headers from response
+    $headers = wp_remote_retrieve_headers($response);
+    
+    // Convert headers to array if needed
+    if (is_object($headers) && method_exists($headers, 'getAll')) {
+        $headers = $headers->getAll();
+    }
+    
+    // Check for known tracking headers
+    foreach ($header_mapping as $header_name => $service_id) {
+        // Skip if service ID is null (requires special parsing)
+        if ($service_id === null) {
+            continue;
+        }
+        
+        // Check if header exists (case-insensitive)
+        $header_value = null;
+        foreach ($headers as $name => $value) {
+            if (strtolower($name) === strtolower($header_name)) {
+                $header_value = $value;
+                break;
+            }
+        }
+        
+        // If header found, add to detected trackers
+        if ($header_value) {
+            $tracker_info = array(
+                'service' => $service_id,
+                'detection_method' => 'header',
+                'header' => $header_name,
+                'value' => $header_value,
+            );
+            
+            // Try to extract ID using pattern if available
+            if (isset($tracking_services[$service_id]['id_pattern'])) {
+                $pattern = $tracking_services[$service_id]['id_pattern'];
+                if (preg_match($pattern, $header_value, $matches)) {
+                    $tracker_info['id'] = $matches[0];
+                }
+            } else {
+                // Use header value as ID if no pattern available
+                $tracker_info['id'] = $header_value;
+            }
+            
+            $detected_trackers[] = $tracker_info;
+        }
+    }
+    
+    // Special handling for generic tracking headers
+    if (isset($headers['X-Analytics']) || isset($headers['x-analytics'])) {
+        $analytics_header = isset($headers['X-Analytics']) ? $headers['X-Analytics'] : $headers['x-analytics'];
+        
+        // Parse X-Analytics header (typically comma-separated key=value pairs)
+        $analytics_parts = explode(',', $analytics_header);
+        foreach ($analytics_parts as $part) {
+            $pair = explode('=', trim($part), 2);
+            if (count($pair) === 2) {
+                $key = $pair[0];
+                $value = $pair[1];
+                
+                // Check for known tracking keys
+                if (stripos($key, 'ga') !== false || stripos($key, 'google') !== false) {
+                    $detected_trackers[] = array(
+                        'service' => 'google_analytics',
+                        'detection_method' => 'header',
+                        'header' => 'X-Analytics',
+                        'key' => $key,
+                        'value' => $value,
+                        'id' => $value,
+                    );
+                } elseif (stripos($key, 'fb') !== false || stripos($key, 'facebook') !== false) {
+                    $detected_trackers[] = array(
+                        'service' => 'facebook_pixel',
+                        'detection_method' => 'header',
+                        'header' => 'X-Analytics',
+                        'key' => $key,
+                        'value' => $value,
+                        'id' => $value,
+                    );
+                }
+                // Add more service checks as needed
+            }
+        }
+    }
+    
+    // Check for tracking information in Link headers (e.g., preconnect, dns-prefetch)
+    if (isset($headers['Link']) || isset($headers['link'])) {
+        $link_header = isset($headers['Link']) ? $headers['Link'] : $headers['link'];
+        
+        // Convert to array if it's not already
+        if (!is_array($link_header)) {
+            $link_header = array($link_header);
+        }
+        
+        // Define domains to check
+        $domain_mapping = array(
+            'google-analytics.com' => 'google_analytics',
+            'analytics.google.com' => 'google_analytics',
+            'googletagmanager.com' => 'google_analytics',
+            'connect.facebook.net' => 'facebook_pixel',
+            'facebook.com' => 'facebook_pixel',
+            'static.hotjar.com' => 'hotjar',
+            'script.hotjar.com' => 'hotjar',
+            'snap.licdn.com' => 'linkedin_insight',
+            'platform.linkedin.com' => 'linkedin_insight',
+            'analytics.twitter.com' => 'twitter_pixel',
+            'static.ads-twitter.com' => 'twitter_pixel',
+            'ct.pinterest.com' => 'pinterest_tag',
+            'analytics.tiktok.com' => 'tiktok_pixel',
+            'sc-static.net' => 'snapchat_pixel',
+            'tr.snapchat.com' => 'snapchat_pixel',
+            'js.hs-scripts.com' => 'hubspot',
+            'js.hsforms.net' => 'hubspot',
+            'matomo.php' => 'matomo',
+            'piwik.php' => 'matomo',
+            'widget.intercom.io' => 'intercom',
+            'cdn.mxpnl.com' => 'mixpanel',
+            'api.amplitude.com' => 'amplitude',
+            'cdn.segment.com' => 'segment',
+            'edge.fullstory.com' => 'fullstory',
+            'script.crazyegg.com' => 'crazy_egg',
+            'cs.luckyorange.net' => 'lucky_orange',
+            'cdn.mouseflow.com' => 'mouseflow',
+            'pi.pardot.com' => 'pardot',
+            'clarity.ms' => 'microsoft_clarity',
+        );
+        
+        foreach ($link_header as $link) {
+            foreach ($domain_mapping as $domain => $service_id) {
+                if (stripos($link, $domain) !== false) {
+                    $detected_trackers[] = array(
+                        'service' => $service_id,
+                        'detection_method' => 'header',
+                        'header' => 'Link',
+                        'value' => $link,
+                    );
+                    break;
+                }
+            }
+        }
+    }
+    
+    return $detected_trackers;
+}
 
 // Hook the notrack_wp_head function to wp_head with priority 1
 add_action('wp_head', 'notrack_wp_head', 1);
