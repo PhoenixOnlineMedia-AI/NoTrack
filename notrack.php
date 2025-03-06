@@ -1395,8 +1395,11 @@ class NoTrack {
         // Perform the header scan
         $header_trackers = notrack_scan_headers_for_trackers();
         
+        // Perform the HTML body scan
+        $body_trackers = notrack_scan_body_for_trackers();
+        
         // Combine results
-        $detected_trackers = array_merge($file_trackers, $header_trackers);
+        $detected_trackers = array_merge($file_trackers, $header_trackers, $body_trackers);
         
         // Cache the results for 1 hour
         set_transient('notrack_scan_results', $detected_trackers, HOUR_IN_SECONDS);
@@ -1537,6 +1540,11 @@ class NoTrack {
                     color: #46b450;
                     border: 1px solid #46b450;
                 }
+                .notrack-method-external_html {
+                    background-color: #f9f0ff;
+                    color: #826eb4;
+                    border: 1px solid #826eb4;
+                }
                 .notrack-scan-results ul {
                     margin: 0;
                     padding-left: 20px;
@@ -1603,6 +1611,8 @@ class NoTrack {
                                                 echo esc_html__('File Scan', 'notrack');
                                             } elseif ($method === 'header') {
                                                 echo esc_html__('HTTP Header', 'notrack');
+                                            } elseif ($method === 'external_html') {
+                                                echo esc_html__('HTML Content', 'notrack');
                                             } else {
                                                 echo esc_html($method);
                                             }
@@ -1625,6 +1635,15 @@ class NoTrack {
                                                     }
                                             ?>
                                                 <li><?php echo esc_html($header_info); ?></li>
+                                            <?php 
+                                                elseif ($tracker['detection_method'] === 'external_html' && !empty($tracker['element_data'])):
+                                                    $element_info = '';
+                                                    if (!empty($tracker['element_type'])) {
+                                                        $element_info = '<' . $tracker['element_type'] . '> ';
+                                                    }
+                                                    $element_info .= $tracker['element_data'];
+                                            ?>
+                                                <li><?php echo esc_html($element_info); ?></li>
                                             <?php 
                                                 endif;
                                             endforeach; 
@@ -1880,6 +1899,394 @@ function notrack_scan_headers_for_trackers() {
 
 // Hook the notrack_wp_head function to wp_head with priority 1
 add_action('wp_head', 'notrack_wp_head', 1);
+
+/**
+ * Scan site HTML body for tracking services
+ *
+ * This function fetches the site's HTML using wp_remote_get(), parses it with
+ * DOMDocument, and scans <script> tags (both src attributes and inline content)
+ * and <meta> tags for keywords and patterns from the tracking services array.
+ *
+ * It extracts tracking IDs using the 'id_pattern' and stores matches with
+ * detection method 'external_html'.
+ *
+ * @since 1.0.0
+ * @return array Array of detected trackers with service name, ID (if found), and detection method
+ */
+function notrack_scan_body_for_trackers() {
+    $detected_trackers = array();
+    
+    // Get tracking services data
+    $tracking_services = notrack_get_supported_trackers();
+    
+    // Perform GET request to site URL
+    $response = wp_remote_get(home_url('/'), array(
+        'timeout' => 10,
+        'sslverify' => false, // Skip SSL verification for internal requests
+        'user-agent' => 'NoTrack Scanner/1.0',
+    ));
+    
+    // Check for errors
+    if (is_wp_error($response)) {
+        // Log error if debugging is enabled
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('NoTrack body scan error: ' . $response->get_error_message());
+        }
+        return $detected_trackers;
+    }
+    
+    // Get body content
+    $html = wp_remote_retrieve_body($response);
+    if (empty($html)) {
+        return $detected_trackers;
+    }
+    
+    // Use DOMDocument to parse HTML
+    libxml_use_internal_errors(true); // Suppress warnings for malformed HTML
+    $dom = new DOMDocument();
+    $dom->loadHTML($html);
+    libxml_clear_errors();
+    
+    // Scan <script> tags
+    $script_tags = $dom->getElementsByTagName('script');
+    foreach ($script_tags as $script) {
+        // Check src attribute
+        $src = $script->getAttribute('src');
+        if (!empty($src)) {
+            scan_url_for_trackers($src, $tracking_services, $detected_trackers);
+        }
+        
+        // Check inline script content
+        $content = $script->textContent;
+        if (!empty($content)) {
+            scan_content_for_trackers($content, $tracking_services, $detected_trackers, 'script');
+        }
+    }
+    
+    // Scan <meta> tags
+    $meta_tags = $dom->getElementsByTagName('meta');
+    foreach ($meta_tags as $meta) {
+        $name = $meta->getAttribute('name');
+        $content = $meta->getAttribute('content');
+        
+        // Skip empty meta tags
+        if (empty($name) && empty($content)) {
+            continue;
+        }
+        
+        // Check for tracking-related meta tags
+        if (stripos($name, 'google') !== false || 
+            stripos($name, 'fb') !== false || 
+            stripos($name, 'facebook') !== false || 
+            stripos($name, 'twitter') !== false || 
+            stripos($name, 'analytics') !== false || 
+            stripos($name, 'pixel') !== false) {
+            
+            // Create meta info string
+            $meta_info = $name . ': ' . $content;
+            
+            // Check against each tracking service
+            foreach ($tracking_services as $service_id => $service_data) {
+                // Skip if no keywords defined
+                if (empty($service_data['keywords'])) {
+                    continue;
+                }
+                
+                // Check for keywords in meta info
+                $found_keyword = false;
+                foreach ($service_data['keywords'] as $keyword) {
+                    if (stripos($meta_info, $keyword) !== false) {
+                        $found_keyword = true;
+                        break;
+                    }
+                }
+                
+                // If keyword found, add to detected trackers
+                if ($found_keyword) {
+                    $tracker_info = array(
+                        'service' => $service_id,
+                        'detection_method' => 'external_html',
+                        'element_type' => 'meta',
+                        'element_data' => $meta_info,
+                    );
+                    
+                    // Try to extract ID using pattern if available
+                    if (!empty($service_data['id_pattern'])) {
+                        $pattern = $service_data['id_pattern'];
+                        if (preg_match($pattern, $content, $matches)) {
+                            $tracker_info['id'] = $matches[0];
+                        }
+                    }
+                    
+                    $detected_trackers[] = $tracker_info;
+                    break; // No need to check other services for this meta tag
+                }
+            }
+        }
+    }
+    
+    // Scan <link> tags
+    $link_tags = $dom->getElementsByTagName('link');
+    foreach ($link_tags as $link) {
+        $href = $link->getAttribute('href');
+        if (!empty($href)) {
+            scan_url_for_trackers($href, $tracking_services, $detected_trackers);
+        }
+    }
+    
+    // Scan <iframe> tags
+    $iframe_tags = $dom->getElementsByTagName('iframe');
+    foreach ($iframe_tags as $iframe) {
+        $src = $iframe->getAttribute('src');
+        if (!empty($src)) {
+            scan_url_for_trackers($src, $tracking_services, $detected_trackers);
+        }
+    }
+    
+    // Scan <img> tags (for tracking pixels)
+    $img_tags = $dom->getElementsByTagName('img');
+    foreach ($img_tags as $img) {
+        $src = $img->getAttribute('src');
+        if (!empty($src)) {
+            // Only check small images that might be tracking pixels
+            $width = $img->getAttribute('width');
+            $height = $img->getAttribute('height');
+            
+            // If width/height are small or not specified, check for tracking
+            if ((empty($width) || intval($width) <= 3) && 
+                (empty($height) || intval($height) <= 3)) {
+                scan_url_for_trackers($src, $tracking_services, $detected_trackers);
+            }
+        }
+    }
+    
+    return $detected_trackers;
+}
+
+/**
+ * Helper function to scan a URL for tracking service indicators
+ *
+ * @since 1.0.0
+ * @param string $url URL to scan
+ * @param array $tracking_services Array of tracking services to look for
+ * @param array &$detected_trackers Reference to array where detected trackers are stored
+ * @return void
+ */
+function scan_url_for_trackers($url, $tracking_services, &$detected_trackers) {
+    // Define domains to check
+    $domain_mapping = array(
+        'google-analytics.com' => 'google_analytics',
+        'analytics.google.com' => 'google_analytics',
+        'googletagmanager.com' => 'google_analytics',
+        'gtag' => 'google_analytics',
+        'connect.facebook.net' => 'facebook_pixel',
+        'facebook.com/tr' => 'facebook_pixel',
+        'static.hotjar.com' => 'hotjar',
+        'script.hotjar.com' => 'hotjar',
+        'snap.licdn.com' => 'linkedin_insight',
+        'platform.linkedin.com' => 'linkedin_insight',
+        'analytics.twitter.com' => 'twitter_pixel',
+        'static.ads-twitter.com' => 'twitter_pixel',
+        'ct.pinterest.com' => 'pinterest_tag',
+        'analytics.tiktok.com' => 'tiktok_pixel',
+        'sc-static.net' => 'snapchat_pixel',
+        'tr.snapchat.com' => 'snapchat_pixel',
+        'js.hs-scripts.com' => 'hubspot',
+        'js.hsforms.net' => 'hubspot',
+        'matomo.php' => 'matomo',
+        'piwik.php' => 'matomo',
+        'widget.intercom.io' => 'intercom',
+        'cdn.mxpnl.com' => 'mixpanel',
+        'api.amplitude.com' => 'amplitude',
+        'cdn.segment.com' => 'segment',
+        'edge.fullstory.com' => 'fullstory',
+        'script.crazyegg.com' => 'crazy_egg',
+        'cs.luckyorange.net' => 'lucky_orange',
+        'cdn.mouseflow.com' => 'mouseflow',
+        'pi.pardot.com' => 'pardot',
+        'clarity.ms' => 'microsoft_clarity',
+    );
+    
+    foreach ($domain_mapping as $domain => $service_id) {
+        if (stripos($url, $domain) !== false) {
+            $tracker_info = array(
+                'service' => $service_id,
+                'detection_method' => 'external_html',
+                'element_type' => 'url',
+                'element_data' => $url,
+            );
+            
+            // Try to extract ID using pattern if available
+            if (isset($tracking_services[$service_id]['id_pattern'])) {
+                $pattern = $tracking_services[$service_id]['id_pattern'];
+                if (preg_match($pattern, $url, $matches)) {
+                    $tracker_info['id'] = $matches[0];
+                }
+            }
+            
+            $detected_trackers[] = $tracker_info;
+            break;
+        }
+    }
+}
+
+/**
+ * Helper function to scan content for tracking service indicators
+ *
+ * @since 1.0.0
+ * @param string $content Content to scan
+ * @param array $tracking_services Array of tracking services to look for
+ * @param array &$detected_trackers Reference to array where detected trackers are stored
+ * @param string $element_type Type of element being scanned (e.g., 'script', 'meta')
+ * @return void
+ */
+function scan_content_for_trackers($content, $tracking_services, &$detected_trackers, $element_type) {
+    // Common tracking initialization patterns
+    $init_patterns = array(
+        'google_analytics' => array(
+            '/UA-\d{4,10}-\d{1,4}/',
+            '/G-[A-Z0-9]{10,12}/',
+            '/gtag\s*\(\s*[\'"]config[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]\s*\)/',
+            '/ga\s*\(\s*[\'"]create[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]\s*,/',
+        ),
+        'facebook_pixel' => array(
+            '/fbq\s*\(\s*[\'"]init[\'"]\s*,\s*[\'"](\d{15,16})[\'"]\s*\)/',
+            '/FB\.init\s*\(\s*{\s*appId\s*:\s*[\'"](\d{15,16})[\'"]\s*,/',
+        ),
+        'hotjar' => array(
+            '/hjid\s*:\s*(\d{7,9})/',
+            '/hotjar\.com.*site=(\d{7,9})/',
+        ),
+        'linkedin_insight' => array(
+            '/_linkedin_data_partner_id\s*=\s*[\'"]?(\d{6,8})[\'"]?/',
+        ),
+        'twitter_pixel' => array(
+            '/twq\s*\(\s*[\'"]init[\'"]\s*,\s*[\'"]([a-z0-9]{5,10})[\'"]\s*\)/',
+        ),
+        'pinterest_tag' => array(
+            '/pintrk\s*\(\s*[\'"]load[\'"]\s*,\s*[\'"](\d{13})[\'"]\s*\)/',
+        ),
+        'tiktok_pixel' => array(
+            '/ttq\.load\s*\(\s*[\'"]([A-Z0-9]{20})[\'"]\s*\)/',
+        ),
+        'snapchat_pixel' => array(
+            '/snaptr\s*\(\s*[\'"]init[\'"]\s*,\s*[\'"]([a-z0-9-]{36})[\'"]\s*,/',
+        ),
+        'hubspot' => array(
+            '/hs-script-loader.*api\.hubspot\.com.*\/(\d{7,8})\.js/',
+        ),
+        'matomo' => array(
+            '/_paq\.push\s*\(\s*\[\s*[\'"]setSiteId[\'"]\s*,\s*[\'"]?(\d{1,4})[\'"]?\s*\]\s*\)/',
+        ),
+        'intercom' => array(
+            '/Intercom\s*\(\s*[\'"]boot[\'"]\s*,\s*{\s*app_id\s*:\s*[\'"]([a-z0-9]{8})[\'"]\s*/',
+            '/window\.intercomSettings\s*=\s*{\s*app_id\s*:\s*[\'"]([a-z0-9]{8})[\'"]\s*/',
+        ),
+        'mixpanel' => array(
+            '/mixpanel\.init\s*\(\s*[\'"]([a-f0-9]{32})[\'"]\s*,/',
+        ),
+        'amplitude' => array(
+            '/amplitude\.init\s*\(\s*[\'"]([a-f0-9]{32})[\'"]\s*,/',
+        ),
+        'segment' => array(
+            '/analytics\.load\s*\(\s*[\'"]([a-zA-Z0-9]{22,32})[\'"]\s*\)/',
+        ),
+        'fullstory' => array(
+            '/window\[[\'"]_fs_org[\'"]\]\s*=\s*[\'"]([A-Z0-9]{7})[\'"]\s*;/',
+        ),
+        'crazy_egg' => array(
+            '/script\.src\s*=\s*[\'"]https:\/\/script\.crazyegg\.com\/pages\/scripts\/(\d{8})\.js[\'"]\s*;/',
+        ),
+        'lucky_orange' => array(
+            '/window\.__lo_site_id\s*=\s*(\d{5,6})/',
+        ),
+        'mouseflow' => array(
+            '/window\._mfq\s*=\s*window\._mfq\s*\|\|\s*\[\];\s*_mfq\.push\s*\(\s*\[\s*[\'"]setAccount[\'"]\s*,\s*[\'"]([a-f0-9]{32})[\'"]\s*\]\s*\)/',
+        ),
+        'pardot' => array(
+            '/piAId\s*=\s*[\'"]?(\d{10,15})[\'"]?/',
+        ),
+        'microsoft_clarity' => array(
+            '/clarity\s*\(\s*[\'"]set[\'"]\s*,\s*[\'"]([a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12})[\'"]\s*\)/',
+        ),
+    );
+    
+    // Check for tracking initialization patterns
+    foreach ($init_patterns as $service_id => $patterns) {
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $content, $matches) && isset($matches[1])) {
+                $tracker_info = array(
+                    'service' => $service_id,
+                    'detection_method' => 'external_html',
+                    'element_type' => $element_type,
+                    'id' => $matches[1],
+                );
+                
+                // Add a snippet of the matching content for context
+                $start_pos = max(0, strpos($content, $matches[0]) - 20);
+                $snippet_length = min(strlen($content) - $start_pos, strlen($matches[0]) + 40);
+                $snippet = substr($content, $start_pos, $snippet_length);
+                $tracker_info['element_data'] = '...' . $snippet . '...';
+                
+                $detected_trackers[] = $tracker_info;
+            }
+        }
+    }
+    
+    // Also check for keywords in content
+    foreach ($tracking_services as $service_id => $service_data) {
+        // Skip if no keywords defined or already detected by pattern
+        if (empty($service_data['keywords'])) {
+            continue;
+        }
+        
+        // Skip if this service was already detected in this content
+        $already_detected = false;
+        foreach ($detected_trackers as $tracker) {
+            if ($tracker['service'] === $service_id && 
+                $tracker['detection_method'] === 'external_html' && 
+                $tracker['element_type'] === $element_type) {
+                $already_detected = true;
+                break;
+            }
+        }
+        
+        if ($already_detected) {
+            continue;
+        }
+        
+        // Check for keywords
+        $found_keyword = false;
+        foreach ($service_data['keywords'] as $keyword) {
+            if (stripos($content, $keyword) !== false) {
+                $found_keyword = true;
+                
+                // Get context around the keyword
+                $start_pos = max(0, stripos($content, $keyword) - 20);
+                $snippet_length = min(strlen($content) - $start_pos, strlen($keyword) + 40);
+                $snippet = substr($content, $start_pos, $snippet_length);
+                
+                $tracker_info = array(
+                    'service' => $service_id,
+                    'detection_method' => 'external_html',
+                    'element_type' => $element_type,
+                    'element_data' => '...' . $snippet . '...',
+                );
+                
+                // Try to extract ID using pattern if available
+                if (!empty($service_data['id_pattern'])) {
+                    $pattern = $service_data['id_pattern'];
+                    if (preg_match($pattern, $content, $matches)) {
+                        $tracker_info['id'] = $matches[0];
+                    }
+                }
+                
+                $detected_trackers[] = $tracker_info;
+                break; // No need to check other keywords for this service
+            }
+        }
+    }
+}
 
 // Hook the notrack_enqueue_scripts function to wp_enqueue_scripts
 add_action('wp_enqueue_scripts', 'notrack_enqueue_scripts');
