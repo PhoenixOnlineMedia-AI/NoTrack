@@ -335,7 +335,7 @@ function notrack_external_scanner_page() {
     $last_scan_date = $last_scan_time ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $last_scan_time) : __('Never', 'notrack');
     
     // Get next scheduled scan
-    $next_scan = wp_next_scheduled('notrack_scan');
+    $next_scan = wp_next_scheduled('notrack_scheduled_scan');
     $next_scan_date = $next_scan ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_scan) : __('Not scheduled', 'notrack');
     
     ?>
@@ -360,11 +360,11 @@ function notrack_external_scanner_page() {
             <div class="notrack-scan-info">
                 <p>
                     <strong><?php echo esc_html__('Last scan:', 'notrack'); ?></strong> 
-                    <?php echo esc_html($last_scan_date); ?>
+                    <span id="notrack-last-scan-time"><?php echo esc_html($last_scan_date); ?></span>
                 </p>
                 <p>
                     <strong><?php echo esc_html__('Next scheduled scan:', 'notrack'); ?></strong> 
-                    <?php echo esc_html($next_scan_date); ?>
+                    <span id="notrack-next-scan-time"><?php echo esc_html($next_scan_date); ?></span>
                 </p>
             </div>
             
@@ -383,6 +383,23 @@ function notrack_external_scanner_page() {
                     <div id="notrack-scan-progress">
                         <div class="notrack-progress-bar"></div>
                     </div>
+                </div>
+                
+                <div id="notrack-scan-results-table" style="display: none; margin-top: 20px;">
+                    <h3><?php echo esc_html__('Detected Tracking Tools', 'notrack'); ?></h3>
+                    <table class="wp-list-table widefat fixed striped">
+                        <thead>
+                            <tr>
+                                <th><?php echo esc_html__('Service', 'notrack'); ?></th>
+                                <th><?php echo esc_html__('ID', 'notrack'); ?></th>
+                                <th><?php echo esc_html__('Detection Method', 'notrack'); ?></th>
+                                <th><?php echo esc_html__('Location', 'notrack'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody id="notrack-detected-trackers">
+                            <!-- Results will be populated here via JavaScript -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -423,6 +440,7 @@ function notrack_external_scanner_page() {
             $('#notrack-ajax-scan').on('click', function() {
                 // Show the results container
                 $('#notrack-scan-results').show();
+                $('#notrack-scan-results-table').hide();
                 
                 // Reset progress bar
                 $('.notrack-progress-bar').css('width', '0%');
@@ -435,8 +453,8 @@ function notrack_external_scanner_page() {
                     url: ajaxurl,
                     type: 'POST',
                     data: {
-                        action: 'notrack_ajax_scan',
-                        nonce: '<?php echo wp_create_nonce('notrack_ajax_scan'); ?>'
+                        action: 'notrack_scan_site',
+                        nonce: '<?php echo wp_create_nonce('notrack_scan_nonce'); ?>'
                     },
                     success: function(response) {
                         if (response.success) {
@@ -446,10 +464,33 @@ function notrack_external_scanner_page() {
                             // Update status
                             $('#notrack-scan-status').text('<?php echo esc_js(__('Scan completed successfully!', 'notrack')); ?>');
                             
-                            // Reload the page after a delay
-                            setTimeout(function() {
-                                window.location.href = '<?php echo esc_js(admin_url('admin.php?page=notrack-detected-tools')); ?>';
-                            }, 1500);
+                            // Update scan times
+                            $('#notrack-last-scan-time').text('<?php echo esc_js(__('Just now', 'notrack')); ?>');
+                            if (response.data.next_scan) {
+                                $('#notrack-next-scan-time').text(response.data.next_scan);
+                            }
+                            
+                            // Display results if trackers were found
+                            if (response.data.count > 0 && response.data.trackers) {
+                                // Clear previous results
+                                $('#notrack-detected-trackers').empty();
+                                
+                                // Add each tracker to the table
+                                $.each(response.data.trackers, function(index, tracker) {
+                                    var row = $('<tr></tr>');
+                                    row.append($('<td></td>').text(tracker.service));
+                                    row.append($('<td></td>').text(tracker.id || '—'));
+                                    row.append($('<td></td>').text(tracker.method));
+                                    row.append($('<td></td>').text(tracker.location || '—'));
+                                    $('#notrack-detected-trackers').append(row);
+                                });
+                                
+                                // Show the results table
+                                $('#notrack-scan-results-table').show();
+                            } else {
+                                // No trackers found
+                                $('#notrack-scan-status').text('<?php echo esc_js(__('Scan completed. No tracking tools were detected.', 'notrack')); ?>');
+                            }
                         } else {
                             // Show error
                             $('#notrack-scan-status').text('<?php echo esc_js(__('Error: ', 'notrack')); ?>' + response.data.message);

@@ -1996,3 +1996,57 @@ function notrack_ajax_scan_callback() {
 
 // Hook the AJAX handler
 add_action('wp_ajax_notrack_ajax_scan', 'notrack_ajax_scan_callback');
+
+/**
+ * AJAX handler for manual site scans
+ * 
+ * This function handles AJAX requests for manual scans triggered from the admin panel.
+ * It performs security checks, runs the scan, and returns the results.
+ * 
+ * @since 1.0.0
+ * @return void
+ */
+function notrack_scan_site_callback() {
+    // Verify nonce
+    check_ajax_referer('notrack_scan_nonce', 'nonce');
+    
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array(
+            'message' => esc_js(__('You do not have permission to perform this action.', 'notrack'))
+        ));
+    }
+    
+    // Run the scan
+    $detected_trackers = notrack_detect_tracking_tools();
+    
+    // Prepare the response data
+    $response_data = array(
+        'message' => esc_js(__('Scan completed successfully.', 'notrack')),
+        'count' => count($detected_trackers),
+        'last_scan' => human_time_diff(time(), time()),
+        'next_scan' => wp_next_scheduled('notrack_scheduled_scan') ? 
+            human_time_diff(time(), wp_next_scheduled('notrack_scheduled_scan')) : 
+            __('Not scheduled', 'notrack')
+    );
+    
+    // Add detected trackers to the response
+    if (!empty($detected_trackers)) {
+        $response_data['trackers'] = array();
+        
+        foreach ($detected_trackers as $tracker) {
+            $response_data['trackers'][] = array(
+                'service' => esc_js($tracker['service']),
+                'id' => isset($tracker['id']) ? esc_js($tracker['id']) : '',
+                'method' => esc_js($tracker['method']),
+                'location' => isset($tracker['location']) ? esc_js($tracker['location']) : ''
+            );
+        }
+    }
+    
+    // Send success response
+    wp_send_json_success($response_data);
+}
+
+// Hook the manual scan AJAX handler
+add_action('wp_ajax_notrack_scan_site', 'notrack_scan_site_callback');
