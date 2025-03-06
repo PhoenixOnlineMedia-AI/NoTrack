@@ -358,6 +358,9 @@ class NoTrack {
         
         // Add shortcode for opt-out form
         add_shortcode( 'notrack_opt_out', array( $this, 'opt_out_shortcode' ) );
+        
+        // Add shortcode for simple opt-out button
+        add_shortcode( 'notrack_opt_out_button', array( $this, 'opt_out_button_shortcode' ) );
     }
 
     /**
@@ -650,6 +653,43 @@ class NoTrack {
         }
         
         echo '</div>';
+        
+        return ob_get_clean();
+    }
+
+    /**
+     * Opt-out button shortcode
+     *
+     * Shortcode to display a simple opt-out button on pages.
+     * This provides a more minimal alternative to the full opt-out form,
+     * allowing users to quickly opt out of tracking with a single button.
+     *
+     * Usage: [notrack_opt_out_button]
+     *
+     * @param array $atts Shortcode attributes.
+     * @return string HTML output.
+     */
+    public function opt_out_button_shortcode( $atts ) {
+        $atts = shortcode_atts(
+            array(
+                'text' => __( 'Opt Out of Tracking', 'notrack' ),
+            ),
+            $atts,
+            'notrack_opt_out_button'
+        );
+        
+        // Check if user has opted out
+        $opted_out = isset( $_COOKIE['notrack_opted_out'] ) && $_COOKIE['notrack_opted_out'] === 'true';
+        
+        ob_start();
+        
+        // Output the button with appropriate text based on current opt-out status
+        echo '<button id="notrack-opt-out" class="notrack-opt-out-button" data-action="' . 
+            ( $opted_out ? 'opt-in' : 'opt-out' ) . '">';
+        echo $opted_out ? 
+            esc_html__( 'Opt In to Tracking', 'notrack' ) : 
+            esc_html( $atts['text'] );
+        echo '</button>';
         
         return ob_get_clean();
     }
