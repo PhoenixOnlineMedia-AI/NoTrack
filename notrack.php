@@ -2,8 +2,8 @@
 /**
  * Plugin Name: NoTrack
  * Plugin URI: https://github.com/PhoenixOnlineMedia-AI/NoTrack
- * Description: Provides user tracking opt-out functionality for WordPress sites.
- * Version: 1.0.0
+ * Description: Provides user tracking opt-out functionality for WordPress sites. Detects and manages tracking tools with secure admin controls and REST API access.
+ * Version: 1.1.0
  * Author: Phoenix Online Media AI
  * Author URI: https://github.com/PhoenixOnlineMedia-AI
  * License: GPL-2.0+
@@ -25,7 +25,7 @@ require_once plugin_dir_path(__FILE__) . 'admin-menu.php';
 /**
  * Define plugin constants
  */
-define( 'NOTRACK_VERSION', '1.0.0' );
+define( 'NOTRACK_VERSION', '1.1.0' );
 define( 'NOTRACK_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'NOTRACK_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -1969,19 +1969,23 @@ function notrack_help_page() {
 }
 
 /**
- * Handle AJAX scan request
+ * AJAX callback for scanning the site
+ * 
+ * This function handles AJAX requests for scanning the site for tracking tools.
+ * It performs security checks, runs the scan, and returns the results.
  * 
  * @since 1.0.0
+ * @return void
  */
 function notrack_ajax_scan_callback() {
     // Check nonce for security
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'notrack_ajax_scan')) {
-        wp_send_json_error(array('message' => __('Security check failed.', 'notrack')));
+        wp_send_json_error(array('message' => esc_html__('Security check failed.', 'notrack')));
     }
     
     // Check user capabilities
     if (!current_user_can('manage_options')) {
-        wp_send_json_error(array('message' => __('You do not have permission to perform this action.', 'notrack')));
+        wp_send_json_error(array('message' => esc_html__('You do not have permission to perform this action.', 'notrack')));
     }
     
     // Run the scan
@@ -1989,7 +1993,7 @@ function notrack_ajax_scan_callback() {
     
     // Send success response
     wp_send_json_success(array(
-        'message' => __('Scan completed successfully.', 'notrack'),
+        'message' => esc_html__('Scan completed successfully.', 'notrack'),
         'count' => count($detected_trackers)
     ));
 }
@@ -2013,7 +2017,7 @@ function notrack_scan_site_callback() {
     // Check user capabilities
     if (!current_user_can('manage_options')) {
         wp_send_json_error(array(
-            'message' => esc_js(__('You do not have permission to perform this action.', 'notrack'))
+            'message' => esc_html__('You do not have permission to perform this action.', 'notrack')
         ));
     }
     
@@ -2022,12 +2026,12 @@ function notrack_scan_site_callback() {
     
     // Prepare the response data
     $response_data = array(
-        'message' => esc_js(__('Scan completed successfully.', 'notrack')),
-        'count' => count($detected_trackers),
-        'last_scan' => human_time_diff(time(), time()),
+        'message' => esc_html__('Scan completed successfully.', 'notrack'),
+        'count' => absint(count($detected_trackers)),
+        'last_scan' => esc_html(human_time_diff(time(), time())),
         'next_scan' => wp_next_scheduled('notrack_scheduled_scan') ? 
-            human_time_diff(time(), wp_next_scheduled('notrack_scheduled_scan')) : 
-            __('Not scheduled', 'notrack')
+            esc_html(human_time_diff(time(), wp_next_scheduled('notrack_scheduled_scan'))) : 
+            esc_html__('Not scheduled', 'notrack')
     );
     
     // Add detected trackers to the response
@@ -2036,10 +2040,10 @@ function notrack_scan_site_callback() {
         
         foreach ($detected_trackers as $tracker) {
             $response_data['trackers'][] = array(
-                'service' => esc_js($tracker['service']),
-                'id' => isset($tracker['id']) ? esc_js($tracker['id']) : '',
-                'method' => esc_js($tracker['method']),
-                'location' => isset($tracker['location']) ? esc_js($tracker['location']) : ''
+                'service' => sanitize_text_field($tracker['service']),
+                'id' => isset($tracker['id']) ? sanitize_text_field($tracker['id']) : '',
+                'method' => sanitize_text_field($tracker['method']),
+                'location' => isset($tracker['location']) ? sanitize_text_field($tracker['location']) : ''
             );
         }
     }
@@ -2105,12 +2109,12 @@ function notrack_rest_scan_callback($request) {
     // Prepare the response data
     $response_data = array(
         'success' => true,
-        'message' => __('Scan completed successfully.', 'notrack'),
-        'count' => count($detected_trackers),
-        'last_scan' => human_time_diff(time(), time()),
+        'message' => esc_html__('Scan completed successfully.', 'notrack'),
+        'count' => absint(count($detected_trackers)),
+        'last_scan' => esc_html(human_time_diff(time(), time())),
         'next_scan' => wp_next_scheduled('notrack_scheduled_scan') ? 
-            human_time_diff(time(), wp_next_scheduled('notrack_scheduled_scan')) : 
-            __('Not scheduled', 'notrack')
+            esc_html(human_time_diff(time(), wp_next_scheduled('notrack_scheduled_scan'))) : 
+            esc_html__('Not scheduled', 'notrack')
     );
     
     // Return the response
@@ -2142,7 +2146,7 @@ function notrack_rest_get_detected_tools_callback($request) {
     // Prepare the response data
     $response_data = array(
         'success' => true,
-        'count' => count($sanitized_trackers),
+        'count' => absint(count($sanitized_trackers)),
         'trackers' => $sanitized_trackers
     );
     
@@ -2159,14 +2163,22 @@ function notrack_rest_get_detected_tools_callback($request) {
  */
 function notrack_rest_get_scan_status_callback($request) {
     // Get the last scan time
-    $last_scan_time = get_option('notrack_last_scan_time', 0);
-    $last_scan_date = $last_scan_time ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $last_scan_time) : __('Never', 'notrack');
-    $last_scan_human = $last_scan_time ? human_time_diff($last_scan_time, time()) . ' ' . __('ago', 'notrack') : __('Never', 'notrack');
+    $last_scan_time = absint(get_option('notrack_last_scan_time', 0));
+    $last_scan_date = $last_scan_time ? 
+        esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $last_scan_time)) : 
+        esc_html__('Never', 'notrack');
+    $last_scan_human = $last_scan_time ? 
+        esc_html(human_time_diff($last_scan_time, time()) . ' ' . __('ago', 'notrack')) : 
+        esc_html__('Never', 'notrack');
     
     // Get next scheduled scan
-    $next_scan = wp_next_scheduled('notrack_scheduled_scan');
-    $next_scan_date = $next_scan ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_scan) : __('Not scheduled', 'notrack');
-    $next_scan_human = $next_scan ? human_time_diff(time(), $next_scan) : __('Not scheduled', 'notrack');
+    $next_scan = absint(wp_next_scheduled('notrack_scheduled_scan'));
+    $next_scan_date = $next_scan ? 
+        esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_scan)) : 
+        esc_html__('Not scheduled', 'notrack');
+    $next_scan_human = $next_scan ? 
+        esc_html(human_time_diff(time(), $next_scan)) : 
+        esc_html__('Not scheduled', 'notrack');
     
     // Get detected trackers count
     $detected_trackers = get_option('notrack_detected_tools', array());
@@ -2180,7 +2192,7 @@ function notrack_rest_get_scan_status_callback($request) {
         'next_scan_timestamp' => $next_scan,
         'next_scan_date' => $next_scan_date,
         'next_scan_human' => $next_scan_human,
-        'detected_trackers_count' => count($detected_trackers)
+        'detected_trackers_count' => absint(count($detected_trackers))
     );
     
     // Return the response
