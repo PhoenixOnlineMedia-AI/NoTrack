@@ -2050,3 +2050,139 @@ function notrack_scan_site_callback() {
 
 // Hook the manual scan AJAX handler
 add_action('wp_ajax_notrack_scan_site', 'notrack_scan_site_callback');
+
+/**
+ * Register NoTrack REST API routes
+ * 
+ * This function registers REST API endpoints for the NoTrack plugin,
+ * allowing external applications to trigger scans and retrieve detected tools.
+ * 
+ * @since 1.0.0
+ */
+function notrack_register_rest_routes() {
+    // Register the REST API namespace
+    register_rest_route('notrack/v1', '/scan', array(
+        'methods' => 'POST',
+        'callback' => 'notrack_rest_scan_callback',
+        'permission_callback' => function() {
+            return current_user_can('manage_options');
+        }
+    ));
+    
+    // Register endpoint to get detected tools
+    register_rest_route('notrack/v1', '/detected-tools', array(
+        'methods' => 'GET',
+        'callback' => 'notrack_rest_get_detected_tools_callback',
+        'permission_callback' => function() {
+            return current_user_can('manage_options');
+        }
+    ));
+    
+    // Register endpoint to get scan status
+    register_rest_route('notrack/v1', '/scan-status', array(
+        'methods' => 'GET',
+        'callback' => 'notrack_rest_get_scan_status_callback',
+        'permission_callback' => function() {
+            return current_user_can('manage_options');
+        }
+    ));
+}
+
+// Hook the REST API registration
+add_action('rest_api_init', 'notrack_register_rest_routes');
+
+/**
+ * REST API callback for triggering a scan
+ * 
+ * @since 1.0.0
+ * @param WP_REST_Request $request The request object
+ * @return WP_REST_Response The response object
+ */
+function notrack_rest_scan_callback($request) {
+    // Run the scan
+    $detected_trackers = notrack_detect_tracking_tools();
+    
+    // Prepare the response data
+    $response_data = array(
+        'success' => true,
+        'message' => __('Scan completed successfully.', 'notrack'),
+        'count' => count($detected_trackers),
+        'last_scan' => human_time_diff(time(), time()),
+        'next_scan' => wp_next_scheduled('notrack_scheduled_scan') ? 
+            human_time_diff(time(), wp_next_scheduled('notrack_scheduled_scan')) : 
+            __('Not scheduled', 'notrack')
+    );
+    
+    // Return the response
+    return new WP_REST_Response($response_data, 200);
+}
+
+/**
+ * REST API callback for retrieving detected tools
+ * 
+ * @since 1.0.0
+ * @param WP_REST_Request $request The request object
+ * @return WP_REST_Response The response object
+ */
+function notrack_rest_get_detected_tools_callback($request) {
+    // Get detected trackers from options
+    $detected_trackers = get_option('notrack_detected_tools', array());
+    
+    // Sanitize the output
+    $sanitized_trackers = array();
+    foreach ($detected_trackers as $tracker) {
+        $sanitized_trackers[] = array(
+            'service' => sanitize_text_field($tracker['service']),
+            'id' => isset($tracker['id']) ? sanitize_text_field($tracker['id']) : '',
+            'method' => sanitize_text_field($tracker['method']),
+            'location' => isset($tracker['location']) ? sanitize_text_field($tracker['location']) : ''
+        );
+    }
+    
+    // Prepare the response data
+    $response_data = array(
+        'success' => true,
+        'count' => count($sanitized_trackers),
+        'trackers' => $sanitized_trackers
+    );
+    
+    // Return the response
+    return new WP_REST_Response($response_data, 200);
+}
+
+/**
+ * REST API callback for retrieving scan status
+ * 
+ * @since 1.0.0
+ * @param WP_REST_Request $request The request object
+ * @return WP_REST_Response The response object
+ */
+function notrack_rest_get_scan_status_callback($request) {
+    // Get the last scan time
+    $last_scan_time = get_option('notrack_last_scan_time', 0);
+    $last_scan_date = $last_scan_time ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $last_scan_time) : __('Never', 'notrack');
+    $last_scan_human = $last_scan_time ? human_time_diff($last_scan_time, time()) . ' ' . __('ago', 'notrack') : __('Never', 'notrack');
+    
+    // Get next scheduled scan
+    $next_scan = wp_next_scheduled('notrack_scheduled_scan');
+    $next_scan_date = $next_scan ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $next_scan) : __('Not scheduled', 'notrack');
+    $next_scan_human = $next_scan ? human_time_diff(time(), $next_scan) : __('Not scheduled', 'notrack');
+    
+    // Get detected trackers count
+    $detected_trackers = get_option('notrack_detected_tools', array());
+    
+    // Prepare the response data
+    $response_data = array(
+        'success' => true,
+        'last_scan_timestamp' => $last_scan_time,
+        'last_scan_date' => $last_scan_date,
+        'last_scan_human' => $last_scan_human,
+        'next_scan_timestamp' => $next_scan,
+        'next_scan_date' => $next_scan_date,
+        'next_scan_human' => $next_scan_human,
+        'detected_trackers_count' => count($detected_trackers)
+    );
+    
+    // Return the response
+    return new WP_REST_Response($response_data, 200);
+}

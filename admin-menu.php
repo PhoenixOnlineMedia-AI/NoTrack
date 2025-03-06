@@ -624,6 +624,61 @@ function notrack_help_page() {
         </div>
         
         <div class="card">
+            <h2><?php echo esc_html__('REST API Endpoints', 'notrack'); ?></h2>
+            <p>
+                <?php echo esc_html__('NoTrack provides REST API endpoints for external applications to interact with the plugin. These endpoints require administrator privileges.', 'notrack'); ?>
+            </p>
+            <table class="wp-list-table widefat fixed">
+                <thead>
+                    <tr>
+                        <th><?php echo esc_html__('Endpoint', 'notrack'); ?></th>
+                        <th><?php echo esc_html__('Method', 'notrack'); ?></th>
+                        <th><?php echo esc_html__('Description', 'notrack'); ?></th>
+                        <th><?php echo esc_html__('Example', 'notrack'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>/wp-json/notrack/v1/scan</code></td>
+                        <td><code>POST</code></td>
+                        <td><?php echo esc_html__('Triggers a scan for tracking tools on the site.', 'notrack'); ?></td>
+                        <td>
+                            <pre>curl -X POST <?php echo esc_url(rest_url('notrack/v1/scan')); ?> \
+--header "X-WP-Nonce: {nonce}" \
+--cookie "wordpress_logged_in_{hash}={cookie}"</pre>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>/wp-json/notrack/v1/detected-tools</code></td>
+                        <td><code>GET</code></td>
+                        <td><?php echo esc_html__('Retrieves the list of detected tracking tools.', 'notrack'); ?></td>
+                        <td>
+                            <pre>curl <?php echo esc_url(rest_url('notrack/v1/detected-tools')); ?> \
+--header "X-WP-Nonce: {nonce}" \
+--cookie "wordpress_logged_in_{hash}={cookie}"</pre>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>/wp-json/notrack/v1/scan-status</code></td>
+                        <td><code>GET</code></td>
+                        <td><?php echo esc_html__('Retrieves information about the last scan and next scheduled scan.', 'notrack'); ?></td>
+                        <td>
+                            <pre>curl <?php echo esc_url(rest_url('notrack/v1/scan-status')); ?> \
+--header "X-WP-Nonce: {nonce}" \
+--cookie "wordpress_logged_in_{hash}={cookie}"</pre>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                <?php echo esc_html__('Note: Authentication is required for all endpoints. You need to include a valid WordPress nonce in the X-WP-Nonce header and be logged in as an administrator.', 'notrack'); ?>
+            </p>
+            <p>
+                <?php echo esc_html__('To get a nonce, you can use the wp-json/wp/v2/nonce endpoint or include wp_rest_nonce() in your WordPress theme.', 'notrack'); ?>
+            </p>
+        </div>
+        
+        <div class="card">
             <h2><?php echo esc_html__('Support', 'notrack'); ?></h2>
             <p>
                 <?php echo esc_html__('For support, please visit the GitHub repository:', 'notrack'); ?>
